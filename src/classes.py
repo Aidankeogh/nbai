@@ -31,6 +31,16 @@ def accumulate_dicts(d1, d2):
                 d1[k] += v
     return d1
 
+FIELD_GOAL_MADE = 1
+FIELD_GOAL_MISSED = 2
+FREE_THROW = 3
+REBOUND = 4
+TURNOVER = 5
+FOUL = 6
+EJECTION = 11
+END_OF_PERIOD = 13
+
+
 class Game():
     def __init__(self, game):
         self.game_id = game['game_id']
@@ -56,11 +66,8 @@ class Game():
     def load_plays(self):
         playloader = StatsNbaPossessionLoader(self.game_id, "file", "/data")
         for play in playloader.items:
-            try:
-                p = Play(play, shots=self.shots)
-                self.plays[p.play_id] = p
-            except:
-                self.bad_plays += 1
+            p = Play(play, shots=self.shots)
+            self.plays[p.play_id] = p
 
     def parse_plays(self):
         for play_id, play in self.plays.items():
@@ -103,24 +110,180 @@ class Play():
         self.possession_start_type = play.possession_start_type
         self.player_stats = {}
         self.events = []
-        self.load_events(play.events, shots)
-        self.parse_events()
 
-    def load_events(self, events, shots):
+        attempts = self.split_events(play.events)
+        
+        for attempt in attempts:
+            if len(attempt) > 0:
+                EventTree(attempt)
+
+    def split_events(self, events):
+        attempts = [[]]
         for event in events:
-            event_id = event.data['event_num']
-            shot = shots[event_id]
-            self.events.append(Event(event, shot=shot))
+            attempts[-1].append(event)
+            if (event.event_type == REBOUND 
+                and event.is_real_rebound
+                and event.oreb):
+                attempts.append([])
 
-    def parse_events(self):
-        for event in self.events:
-            self.player_stats = accumulate_dicts(self.player_stats, event.player_stats)
+            if (event.event_type == FREE_THROW
+                and event.next_event is not None
+                and event.next_event.event_type != FREE_THROW
+                and event.foul_that_led_to_ft is not None
+                and event.foul_that_led_to_ft.is_flagrant):
+                attempts.append([])
+
+        return attempts
 
     def __repr__(self):
         small_dict = self.__dict__
         small_dict.pop('events')
         return yaml.dump({self.play_id: small_dict}, allow_unicode=True, default_flow_style=False)
 
+class EventTree():
+    def __init__(self, events):
+        self.offense_team = None
+        self.offense_players = None
+        self.defense_team = None
+        self.defense_players = None
+
+        self.n_shots = 0
+        self.n_rebounds = 0
+        self.n_free_throws = 0
+        self.n_free_throws_made = 0
+        self.last_free_throw_made = False
+        self.shot_made = False
+
+        self.shooter = None
+        self.freethrower = None
+        self.assister = None
+        self.blocker = None
+
+        self.fouler = None
+        self.fouled = None
+        self.offensive_fouler = None
+        self.shooting_fouler = None
+        self.foul_type = None
+
+        self.shot_type = None
+        self.shot_value = None
+        self.shot_distance = None
+
+        self.defensive_rebounder = None
+        self.offensive_rebounder = None
+
+        self.turnoverer = None
+        self.turnover_type = None
+        self.stealer = None
+
+        self.second_chance = False
+        print()
+        for event in events:
+            print(event.event_type, event.description)
+            
+        self.parse_event_contents(events)
+        self.create_tree()
+
+    def create_tree(self):
+        tree = []
+        
+        if self.shot_value is None:
+            self.shot_value = self.n_free_throws
+
+        if self.shooter:
+            tree += ["SHOT", self.shooter, self.shot_value, self.shot_type, self.shot_distance]
+            tree += [self.assister, self.blocker]
+            tree += ["MAKE" if self.shot_made else "MISS"]
+            tree += [self.shooting_fouler, self.n_free_throws, self.n_free_throws_made]
+            tree += [self.offensive_rebounder, self.defensive_rebounder]
+        elif self.turnoverer:
+            tree += ["TURNOVER ", self.turnoverer, self.stealer, self.offensive_fouler, self.fouled]
+        elif self.n_free_throws > 0:
+            tree += ["FOUL ", self.fouler, self.fouled, self.n_free_throws, self.n_free_throws_made]
+            tree += [self.offensive_rebounder, self.defensive_rebounder]
+        else:
+            tree += ["UNKNOWN"]
+        print(tree)
+
+    def parse_event_contents(self, events):
+        n_shots = 0 # Should always be 0 or 1
+        shot_event = None
+        contains_foul = False
+        shot_made = None
+        for event in events:
+            if event.event_type == FIELD_GOAL_MADE:
+                self.parse_shot(event)
+            if event.event_type == FIELD_GOAL_MISSED:
+                self.parse_shot(event)
+            if event.event_type == FREE_THROW:
+                self.parse_free_throw(event)
+            if event.event_type == REBOUND:
+                self.parse_rebound(event)
+            if event.event_type == FOUL:
+                self.parse_foul(event)
+            if event.event_type == TURNOVER:
+                self.parse_turnover(event)
+
+    def parse_shot(self, event):
+        self.parse_teams(event)
+        self.n_shots += 1
+        self.shooter = name(event.data['player1_id'])
+        self.shot_distance = event.distance
+        self.shot_type = event.shot_type
+        self.shot_value = event.shot_value
+        self.second_chance = event.is_second_chance_event()
+        self.shot_made = (event.event_type == FIELD_GOAL_MADE)
+        
+        if event.is_assisted:
+            self.assister = name(event.data['player2_id'])
+
+        if event.is_blocked:
+            self.blocker = name(event.data['player3_id'])
+
+    def parse_free_throw(self, event):
+        self.n_free_throws += 1
+        self.n_free_throws_made += event.is_made
+        if self.offense_team is None:
+            self.parse_teams(event.event_for_efficiency_stats)
+        if event.is_end_ft:
+            self.last_free_throw_made = event.is_made
+        self.freethrower = name(event.data['player1_id'])
+    
+    def parse_rebound(self, event):
+        if event.is_real_rebound:
+            self.n_rebounds += 1
+            if event.oreb:
+                self.offensive_rebounder = name(event.data['player1_id'])
+            else:
+                self.defensive_rebounder = name(event.data['player1_id'])
+    
+    def parse_foul(self, event):
+        self.foul_type = event.foul_type_string
+        self.fouler = name(event.data['player1_id'])
+        if event.is_offensive_foul:
+            self.offensive_fouler = self.fouler
+        if 'player3_id' in event.data:
+            self.fouled = name(event.data['player3_id'])
+        if event.is_shooting_foul:
+            self.shooting_fouler = self.fouler
+            self.shooter = self.fouled
+        
+    def parse_turnover(self, event):
+        self.parse_teams(event)
+        self.turnoverer = name(event.data['player1_id'])
+        if event.is_steal:
+            self.stealer = name(event.data['player3_id'])
+    
+    def parse_teams(self, event):  
+        self.offense_team = teamname(event.get_offense_team_id())
+
+        for team, players in event.current_players.items():
+            if teamname(team) is not self.offense_team:
+                self.defense_team = teamname(team)
+                self.defense_players = [name(player_id) for player_id in players]
+            else:
+                self.offense_players = [name(player_id) for player_id in players]
+        
 class Event():
     def __init__(self, event, shot=None):
         self.shot = shot
@@ -135,8 +298,8 @@ class Event():
             if team_name is not self.offense_team:
                 self.defense_team = team_name
             self.player_stats[team_name] = {name(player_id):{} for player_id in players}
-            
         event_type_enum = event.data['event_type']
+        self.event_type = str(event_type_enum)
         if event_type_enum == 1:
             self.event_type = 'field_goal_made'
             self.parse_field_goal(event)
@@ -176,8 +339,10 @@ class Event():
             if event.counts_as_personal_foul:
                 fouler = name(event.data['player1_id'])
                 if fouler in self.player_stats[self.defense_team]:
+                    self.foul_type = 'defensive'
                     self.player_stats[self.defense_team][fouler]['d_foul'] = 1
                 else:
+                    self.foul_type = 'offensive'
                     self.player_stats[self.offense_team][fouler]['o_foul'] = 1
 
             if 'player3_id' in event.data:
@@ -189,7 +354,8 @@ class Event():
 
         if event_type_enum == 7:  
             self.event_type = 'violation'
-            #self.violator = name(event.data['player1_id'])
+            self.violator = name(event.data['player1_id'])
+            print(self.violator)
 
         if event_type_enum == 8:  
             self.event_type = 'substitution'
@@ -215,6 +381,8 @@ class Event():
             
         if event_type_enum == 13: 
             self.event_type = 'period_end'
+        
+
 
     def parse_field_goal(self, event):
         shooter = name(event.data['player1_id'])
@@ -275,7 +443,7 @@ class Shot():
         return yaml.dump({self.event_id: self.__dict__}, allow_unicode=True, default_flow_style=False)
 
 season_types = ["Regular Season", "Playoffs"]
-seasons = [str(i) + "-" + str(i+1)[-2:] for i in range(2000, 2020)]
+seasons = [str(i) + "-" + str(i+1)[-2:] for i in range(2018, 2019)]
 
 all_games = []
 for season in seasons:
@@ -284,19 +452,25 @@ for season in seasons:
         for game in season_games.items:
             all_games.append(game.data)
 
-total_bad_plays = 0
-total_errs = 0
-for i, game in enumerate(all_games):
-    try:
-        g = Game(game)
-        with open(os.path.join('.', 'games', g.game_id + '.json'), 'w') as f:
-            json.dump(g.to_dict(), f)
-        total_bad_plays += g.bad_plays
-        print(i, "-", g.bad_plays, '-', total_bad_plays)
-    except Exception as e:
-        traceback.print_exc()
-        total_errs += 1
-        print(game, total_errs)
-    break
-print(g)
-print(g.plays[0])
+i = 0
+for game in all_games:
+    i = i + 1
+    print(i)
+    g = Game(game)
+print("end")
+# total_bad_plays = 0
+# total_errs = 0
+# for i, game in enumerate(all_games):
+#     g = Game(game)
+#     try:
+#         with open(os.path.join('.', 'games', g.game_id + '.json'), 'w') as f:
+#             json.dump(g.to_dict(), f)
+#         total_bad_plays += g.bad_plays
+#         print(i, "-", g.bad_plays, '-', total_bad_plays)
+#     except Exception as e:
+#         traceback.print_exc()
+#         total_errs += 1
+#         print(game, total_errs)
+#     break
+# print(g)
+# print(g.plays[0])

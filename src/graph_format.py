@@ -56,13 +56,13 @@ def generate_game(g, db=None):
     word_id = "game-" + generate_id(word_count=5)
     children = []
     pos_data = None
-    for p in StatsNbaPossessionLoader(g.data['game_id'], "file", "/data").items:
+    for p in StatsNbaPossessionLoader(g.data['game_id'], "file", "data").items:
         grandchildren, pos_data = generate_possession(p, pos_data, db)
         children += [[word_id] + g for g in grandchildren]
 
     data = {}
     data['date'] = g.data['date']
-    data['scores'] = pos_data['scores']
+    data['scores'] = pos_data['scores'] 
     data['id'] = g.data['game_id']
     data['home_team'] = team_name(g.data['home_team_id'])
     data['away_team'] = team_name(g.data['visitor_team_id'])
@@ -74,7 +74,7 @@ def generate_season(year, db=None):
     word_id = year
     children = []
     for season_type in ["Regular Season", "Playoffs"]:
-        for g in StatsNbaGameFinderLoader("nba", year, season_type, "file", "/data").items:
+        for g in StatsNbaGameFinderLoader("nba", year, season_type, "file", "data").items:
             game = generate_game(g, db)
             children += [[word_id] + c for c in game]
     data = {}

@@ -6,4 +6,5 @@ players*
 games*
 game_arrays*
 .vscode
+dump.rdb
 *.pyc

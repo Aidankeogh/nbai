@@ -2,10 +2,10 @@ import json
 import yaml
 import os
 
-with open("G:/nbaiv2/team_ids.json", "r") as f:
+with open("team_ids.json", "r") as f:
     team_ids = json.load(f)
 
-with open("G:/nbaiv2/player_info.json", "r") as f:
+with open("player_info.json", "r") as f:
     player_info = json.load(f)
 
 FIELD_GOAL_MADE = 1

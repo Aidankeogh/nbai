@@ -4,5 +4,6 @@ env
 possessions
 players*
 games*
+game_arrays*
 .vscode
 *.pyc

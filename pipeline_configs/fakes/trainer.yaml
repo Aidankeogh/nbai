@@ -1,0 +1,7 @@
+module: fakes
+version: fakes.0.0.0
+deps: 
+  - dataset
+
+params:
+  p: 1

@@ -1,0 +1,8 @@
+module: fakes
+version: fakes.0.0.0
+deps:
+  - trainer
+  - loader
+
+params:
+  k: 0.25

@@ -147,8 +147,12 @@ class NbaPosessionDatabase(NbaDatabase):
         item_set = set()
         self.item_keys = [tuple(key[0:3]) for key in self.item_keys]  # cut out plays
         self.item_keys = list(set(self.item_keys)) # remove duplicates
+        self.db = None
+        self.db_key = db
 
     def __getitem__(self, idx):
+        if self.db is None:
+            self.db = redis.Redis(host='localhost', port=6379, db=self.db_key)
         _, game, possession = self.item_keys[idx]
         game = msgpack.loads(self.db.get(game))
         pos = msgpack.loads(self.db.get(possession))

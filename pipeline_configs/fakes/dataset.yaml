@@ -1,0 +1,4 @@
+module: fakes
+version: fakes.0.0.0
+deps: 
+  - loader

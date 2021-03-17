@@ -1,3 +1,5 @@
-module: fakes
-version: fakes.0.0.0
+module: lmdb_db
+version: dev.0.0.0
 deps: []
+
+args: {}

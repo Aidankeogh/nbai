@@ -8,3 +8,4 @@ game_arrays*
 .vscode
 dump.rdb
 *.pyc
+*.mdb

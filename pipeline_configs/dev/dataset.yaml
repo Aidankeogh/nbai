@@ -1,4 +1,6 @@
-module: fakes
-version: fakes.0.0.0
+module: pow_dataset
+version: dev.0.0.0
 deps: 
   - loader
+
+args: {}

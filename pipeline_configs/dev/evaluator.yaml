@@ -4,5 +4,5 @@ deps:
   - trainer
   - loader
 
-params:
+args:
   k: 0.25

@@ -9,19 +9,17 @@ def create_dataset(config, db):
     dataset = tuple(input_stats)
     db[config['dataset']['key']] = dataset
 
-def train_model(config, db):
+def train_model(config, db, p):
     dataset = db[config['dataset']['key']]
-    params = config['trainer']['params']
-    p =  params['p']
+    args = config['trainer']['args']
 
     avg = sum(dataset) / len(dataset)
     db[config['trainer']['key']] = lambda a : a - p / avg
 
-def create_eval_stat(config, db): 
+def create_eval_stat(config, db, k): 
     input_stats = db[config['loader']['key']]
     model = db[config['trainer']['key']]
-    params = config['evaluator']['params']
-    k = params['k']
+    args = config['evaluator']['args']
 
     eval_stat = [model(x) * k for x in input_stats]
     db[config['evaluator']['key']] = eval_stat

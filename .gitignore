@@ -9,3 +9,4 @@ game_arrays*
 dump.rdb
 *.pyc
 *.mdb
+prebuilt_datasets*

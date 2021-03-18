@@ -86,8 +86,12 @@ def generate_season(year, db=None):
 
 
 def load_stats(config, db, years=[2016]):
+    db.set_namespace(config['loader']['key'])
+
     year_ids = [str(y-1) + "-" + str(y)[-2:] for y in years]
     for year_id in year_ids:
         print(f"creating year {year_id}")
         season_keys = generate_season(year_id, db)
         db['item_keys_{}'.format(year_id)] = msgpack.dumps(season_keys)
+    
+    db['completed'] = 'true'.encode()

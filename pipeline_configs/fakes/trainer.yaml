@@ -3,5 +3,5 @@ version: fakes.0.0.0
 deps: 
   - dataset
 
-params:
+args:
   p: 1

@@ -8,3 +8,5 @@ game_arrays*
 .vscode
 dump.rdb
 *.pyc
+*.mdb
+prebuilt_datasets*

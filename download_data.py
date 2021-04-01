@@ -4,8 +4,8 @@ import shutil
 
 http = urllib3.PoolManager()
 url = "https://pbpstats.s3.amazonaws.com/data.zip"
-zip_path = "cache/data.zip"
-extract_dir = "cache"
+zip_path = "data.zip"
+extract_dir = "."
 with open(zip_path, 'wb') as out:
     r = http.request('GET', url, preload_content=False)
     shutil.copyfileobj(r, out)

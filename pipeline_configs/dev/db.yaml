@@ -1,4 +1,4 @@
-module: h5_db
+module: lmdb_db
 version: dev.0.0.0
 deps: []
 

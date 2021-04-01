@@ -1,5 +1,5 @@
 import argparse
-from src.load_configs import load_config
+from src.pipeline_utilities.load_configs import load_config
 
 
 def run_pipeline(pipeline_folder):

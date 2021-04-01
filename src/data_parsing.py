@@ -10,9 +10,10 @@ FOUL = 6
 EJECTION = 11
 END_OF_PERIOD = 13
 
-def parse_event_contents(events, second_chance=False):
+def parse_play(in_data, out_data):
+    index, events = in_data['play']
     play = Play()
-    play.is_second_chance = second_chance
+    play.is_second_chance = index > 1
     for event in events:
         if event.event_type == FIELD_GOAL_MADE:
             parse_shot(play, event)
@@ -26,10 +27,9 @@ def parse_event_contents(events, second_chance=False):
             parse_foul(play, event)
         if event.event_type == TURNOVER:
             parse_turnover(play, event)
-    return play
+    out_data['plays'].append(play.data)
 
 def parse_shot(play, event):
-    parse_teams(play, event)
     play.fga = 1
     play.o_fga = event.data['player1_id']
     play.shot_dist = event.distance if event.distance is not None else -1
@@ -114,6 +114,5 @@ def split_events(events):
 
     if len(attempts[0]) == 0:
         attempts = []
-
-    return attempts
+    return enumerate(attempts)
 

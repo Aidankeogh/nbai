@@ -1,8 +1,8 @@
 
 set -e
 python -m src.h5_db
+git pull origin master
 git add .
-
 curr_branch=$(git rev-parse --abbrev-ref HEAD)
 echo $curr_branch
 if [ "$curr_branch" == "master" ]

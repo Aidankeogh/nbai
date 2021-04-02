@@ -4,7 +4,8 @@ python -m src.h5_db
 git add .
 
 curr_branch=$(git rev-parse --abbrev-ref HEAD)
-if [ curr_branch == "master" ]
+echo $curr_branch
+if [ "$curr_branch" == "master" ]
 then 
     echo "$curr_branch"
     echo "ON MASTER"

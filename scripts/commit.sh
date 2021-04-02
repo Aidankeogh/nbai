@@ -8,11 +8,11 @@ if [[ curr_branch == "master" ]]
 then 
     echo "$curr_branch"
     git checkout -b $1
-    git commit --amend -m "$1"
+    git commit -m "$1"
     curr_branch=$1
     git push -u origin HEAD
 else
-    git commit --amend -m "$curr_branch"
+    git commit -m "$curr_branch"
     git push -u origin HEAD
 fi
 

@@ -1,6 +1,5 @@
 {
     "jupyter.jupyterServerType": "local",
-    "python.pythonPath": "/Users/aidankeogh/opt/anaconda3/envs/nbai/bin/python",
     "terminal.integrated.shellArgs.linux": ["environment.sh"],
     "terminal.integrated.shellArgs.osx": ["environment.sh"],
     "terminal.integrated.shellArgs.windows": ["environment.sh"],

@@ -7,6 +7,7 @@ curr_branch=$(git rev-parse --abbrev-ref HEAD)
 if [[ curr_branch == "master" ]]
 then 
     echo "$curr_branch"
+    echo "ON MASTER"
     git checkout -b $1
     git commit -m "$1"
     curr_branch=$1

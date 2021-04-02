@@ -10,10 +10,10 @@ then
     git checkout -b $1
     git commit -m "$1"
     curr_branch=$1
-    git push -u origin HEAD
+    git push -u origin HEAD $2
 else
     git commit -m "$curr_branch"
-    git push -u origin HEAD
+    git push -u origin HEAD $2
 fi
 
-echo "https://github.com/Aidankeogh/nbai/compare/$curr_branch...master"
+echo "https://github.com/Aidankeogh/nbai/compare/master...$curr_branch"

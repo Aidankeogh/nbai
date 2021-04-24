@@ -53,7 +53,7 @@ class h5py_wrapper:
             else:
                 self.grp[key][idx] = value
 
-def get_connection(config, name="nbai_db"): # 30 gb database size
+def get_connection(config, name="nbai_db"):
     return h5py_wrapper(name)
 
 if __name__ == "__main__":

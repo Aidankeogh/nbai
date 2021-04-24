@@ -1,5 +1,4 @@
-from src.data_utils import player_name, player_id, team_name, team_id
-from src.data_format import Play
+from src.data.play import Play
 from collections import defaultdict
 import torch
 import copy
@@ -13,14 +12,15 @@ categories = ['pts', '2pa', '2pm', '3pm', '3pa', 'ftm',
 
 c = {categories[i] : i for i in range(len(categories))}
 class Stats(defaultdict):
-    def __init__(self, p=None):
+    def __init__(self, p, rosters):
         super().__init__(lambda: torch.zeros(len(categories)))
-        self.player_dict = defaultdict(set)
+        
         if type(p) is Play:
-            self.player_dict[p.off_team_name] = set(p.off_team)
-            self.player_dict[p.def_team_name] = set(p.def_team)
+            
+            self.player_dict[p.offense_team] = set(p.off_team)
+            self.player_dict[p.offense_team] = set(p.def_team)
 
-            for player in p.off_team:
+            for player in p.offense_roster:
                 self[player][c['o_pos']] = 1 - p.is_second_chance
                 self[player][c['o+-']] = p.score_change
     

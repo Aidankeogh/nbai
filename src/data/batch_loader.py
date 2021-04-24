@@ -1,14 +1,17 @@
-from pbpstats.data_loader import StatsNbaEnhancedPbpLoader, StatsNbaPossessionLoader, StatsNbaShotsLoader, StatsNbaGameFinderLoader
-from human_id import generate_id
-import msgpack
-import pickle
+from pbpstats.resources.possessions.possession import Possession
+from src.data.box_stat_parser import parse_box_stats
+from src.data.box_stats import box_stats
+import yaml
+import os
+import numpy as np
 import torch
-from collections.abc import Iterable
+from pbpstats.data_loader import StatsNbaPossessionLoader, StatsNbaGameFinderLoader
 from collections import defaultdict
-from src.data_parsing import split_events, parse_play
-from src.data_format import Play
-from src.data_utils import team_name
-from torch.utils.data import Dataset, DataLoader
+from src.data.play_parser import split_events, parse_play
+from src.data.play import Play
+from src.data.data_utils import team_name
+from src.utilities.global_timers import timeit, timers
+from src.h5_db import get_connection
 
 FOUL = 6
 def time_to_seconds(time, period):
@@ -22,6 +25,7 @@ def get_prev(prev, key, default=0):
         prev_val = prev[-1][key]
     return prev_val
 
+@timeit
 def parse_possession(in_data, out_data):
     possession = {}
     raw_possession = in_data['possession']
@@ -31,12 +35,12 @@ def parse_possession(in_data, out_data):
     possession['end_idx'] = len(out_data['plays'])
     plays = out_data['plays'][possession['start_idx']:possession['end_idx']]
     plays = [Play(p) for p in plays]
-    offensive_team = None
-    offensive_team = plays[0].off_team_name
-    defense_team = plays[0].def_team_name
-
-    if len(plays) == 0 or offensive_team is None or defense_team is None:  # bad possession, skip
+    if len(plays) == 0:  # bad possession, skip
         return [], possession
+
+    offensive_team = None
+    offensive_team = plays[0].offense_team
+    defense_team = plays[0].offense_team
 
     possession['scores'] = get_prev(out_data['possessions'], 'scores', defaultdict(int))
     possession['penalty_fouls'] = get_prev(out_data['possessions'], 'scores', defaultdict(int))
@@ -65,18 +69,20 @@ def parse_possession(in_data, out_data):
     possession['end_time'] = time_to_seconds(raw_possession.end_time,  possession['period'])
     out_data['possessions'].append(possession)
 
+@timeit
 def parse_game(in_data, out_data):
     raw_game = in_data['game']
     game = {}
-    game['start_idx'] = get_prev(out_data['games'], 'start_idx')
+    game['start_idx'] = get_prev(out_data['games'], 'end_idx')
     game['end_idx'] = len(out_data['plays'])
 
-    game['start_pos_idx'] = get_prev(out_data['games'], 'start_pos_idx')
-    game['end_pos_idx'] = len(out_data['plays'])
-    
+    game['start_pos_idx'] = get_prev(out_data['games'], 'end_pos_idx')
+    game['end_pos_idx'] = len(out_data['possessions'])
+
     game['date'] = raw_game.data['date']
     possessions = out_data['possessions'][game['start_pos_idx']: game['end_pos_idx']]
     game['scores'] = defaultdict(int)
+
     for possession in possessions:
         for k, v in possession['scores'].items():
             game['scores'][k] += v
@@ -85,29 +91,58 @@ def parse_game(in_data, out_data):
     game['away_team'] = team_name(raw_game.data['visitor_team_id'])
     out_data['games'].append(game)
 
+@timeit
 def parse_season(in_data, out_data):
     season = {}
-    season['year'] = in_data['season']
-    season['type']
-    season['start_idx'] = get_prev(out_data['seasons'], 'start_idx')
+    season['year'] = in_data['season'][0]
+    season['type'] = in_data['season'][1]
+    season['start_idx'] = get_prev(out_data['seasons'], 'end_idx')
     season['end_idx'] = len(out_data['plays'])
-    season['start_game_idx'] = get_prev(out_data['seasons'], 'start_game_idx')
+    season['start_game_idx'] = get_prev(out_data['seasons'], 'end_game_idx')
     season['end_game_idx'] = len(out_data['games'])
-    season['start_pos_idx'] = get_prev(out_data['seasons'], 'start_pos_idx')
+    season['start_pos_idx'] = get_prev(out_data['seasons'], 'end_pos_idx')
     season['end_pos_idx'] = len(out_data['possessions'])
+    season['stats'] = {}
+    season['rosters'] = defaultdict(set)
+    plays = [Play(play) for play in out_data['plays'][season['start_idx']:season['end_idx']]]
+
+    for play in plays:
+        season['rosters'][play.offense_team].update(play.offense_roster)
+        season['rosters'][play.defense_team].update(play.defense_roster)
+
+    for key in season['rosters'].keys():
+        season['rosters'][key] = list(season['rosters'][key])
+        season['stats'][key] = box_stats(season['rosters'][key])
+    season['rosters'] = dict(season['rosters'])
+    
+    for play in plays:
+        try:
+            off_stats, def_stats = parse_box_stats(play, season['rosters'])
+            season['stats'][play.offense_team] += off_stats
+            season['stats'][play.defense_team] += def_stats
+        except Exception as e:
+            print(e)
+
     out_data['seasons'].append(season)
 
 def dump_season(out_data, db):
-    pass
+    season = out_data['seasons'][-1]
+    key = os.path.join(season['year'], season['type'], 'plays')
+    plays = out_data['plays']
+    print(len(plays))
+    print(type(plays))
+    print(plays[0])
+    db[key] = torch.stack(plays).numpy()
 
-def load_stats(config, db, years=[2016]):
+@timeit
+def load_stats(config, db, years=range(2001,2020)):
     #db.set_namespace(config['loader']['key'])
 
     out_data = {
         'seasons': [],
         'games': [],
         'possessions': [],
-        'plays': []
+        'plays': [],
     }
 
     in_data = {
@@ -118,14 +153,14 @@ def load_stats(config, db, years=[2016]):
     }
 
     season_iter = []
-    for season_type in ("Regular Season", "Playoffs"):
+    for season_type in ["Playoffs", "Regular Season"]:
         season_iter.extend([(str(y-1) + "-" + str(y)[-2:], season_type) for y in years])
 
     for in_season in season_iter:
-        game_iter = StatsNbaGameFinderLoader("nba", in_season[0], in_season[1], "file", "data").items
+        game_iter = StatsNbaGameFinderLoader("nba", in_season[0], in_season[1], "file", "cache/data").items
         in_data['season'] = in_season
         for in_game in game_iter:
-            possession_iter = StatsNbaPossessionLoader(in_game.data['game_id'], "file", "data").items
+            possession_iter = StatsNbaPossessionLoader(in_game.data['game_id'], "file", "cache/data").items
             in_data['game'] = in_game
             for in_possession in possession_iter:
                 in_data['possession'] = in_possession
@@ -137,6 +172,12 @@ def load_stats(config, db, years=[2016]):
             parse_game(in_data, out_data)
         parse_season(in_data, out_data)
         dump_season(out_data, db)
+        print(timers.total())
+    return out_data
 
+db = get_connection({}, name="test")
+load_stats(None, db, years=range(2018,2019))
 
-load_stats(None, None)
+plays = db['2018-19/Playoffs/plays']
+print(len(plays))
+print(plays[0])

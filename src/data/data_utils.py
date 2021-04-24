@@ -2,11 +2,11 @@ import json
 import yaml
 import os
 
-with open("team_ids.json", "r") as f:
-    team_ids = json.load(f)
+with open("metadata/team_ids.yaml", "r") as f:
+    team_ids = yaml.safe_load(f)
 
-with open("player_info.json", "r") as f:
-    player_info = json.load(f)
+with open("metadata/player_info.yaml", "r") as f:
+    player_info = yaml.safe_load(f)
 
 FIELD_GOAL_MADE = 1
 FIELD_GOAL_MISSED = 2
@@ -24,7 +24,7 @@ for p_id, player in player_info.items():
 def player_name(player_id):
     if player_id == -1:
         return None
-    player_id = str(int(player_id))
+    player_id = int(player_id)
     if player_id in player_info:
         return player_info[player_id]['PLAYER_SLUG']
 
@@ -37,7 +37,7 @@ def player_id(name):
 def team_name(team_id):
     if team_id < 1610612736:
         team_id = int(team_id) + 1610612736
-    team_id = str(int(team_id))
+    team_id = int(team_id)
     if team_id in team_ids:
         return team_ids[team_id]
 

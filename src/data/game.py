@@ -7,6 +7,9 @@ play_args = parse_yaml("src/data/game.yaml")
 class Game(thought_object):
     def __init__(self, data=None):
         super().__init__(*play_args, data=data)
+    
+    def __repr__(self):
+        return f"{self.away_team}: {self.away_team_score} @ {self.home_team}: {self.home_team_score}"
 
 @timeit
 def parse_game(in_data, out_data):

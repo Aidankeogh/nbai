@@ -8,12 +8,12 @@ import pickle
 class h5py_wrapper:
     def __init__(self, name, dir="cache"):
         filename = dir + '/' + name + '.hdf5'
-        try:
-            self.f = h5py.File(filename, 'w')
-        except OSError as e:
-            os.remove(filename)
-            print(f"Previous {filename} DB deleted due to following error: {e}")
-            self.f = h5py.File(filename, 'w')
+        #try:
+        self.f = h5py.File(filename, 'a')
+        #except IndentationError as e: #OSError as e:
+        #    os.remove(filename)
+        #    print(f"Previous {filename} DB deleted due to following error: {e}")
+        #    self.f = h5py.File(filename, 'a')
 
         self.set_namespace("root")
 

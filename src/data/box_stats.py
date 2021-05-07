@@ -7,8 +7,8 @@ categories = ['pts', '2pa', '2pm', '3pm', '3pa', 'ftm',
               'tov', 'pfs', 'o+-', 'd+-', 'o_pos', 'd_pos']
 category_idxes = {category: i for i, category in enumerate(categories)}
 
-class box_stats:
-    def __init__(self, roster, data=None) -> None:
+class Box_stats:
+    def __init__(self, roster, data=None) -> None:            
         if "none" in roster:
             print(roster)
             raise Exception("ERROR")
@@ -48,7 +48,7 @@ class box_stats:
             self.data[player_idx, category_idx] = value
 
     def __add__(self, other):
-        return box_stats(self.roster, self.data + other.data)
+        return Box_stats(self.roster, self.data + other.data)
 
     def __iadd__(self, other):
         self.data += other.data
@@ -66,8 +66,8 @@ def parse_box_stats(play, rosters):
     offense_roster = rosters[play.offense_team]
     defense_roster = rosters[play.defense_team]
 
-    o_stats = box_stats(offense_roster)
-    d_stats = box_stats(defense_roster)
+    o_stats = Box_stats(offense_roster)
+    d_stats = Box_stats(defense_roster)
 
     for player in play.offense_roster:
         o_stats[player, 'o_pos'] = 1 - play.is_second_chance

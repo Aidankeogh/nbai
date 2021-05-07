@@ -7,15 +7,19 @@ def parse_yaml(yaml_path):
 
     data_keys = []
     is_embedding = {}
+    is_int = {}
     for k, v in path.items():
         if v['type'] == 'embedding_list':
             is_embedding[k] = True
+            is_int[k] = False
             for i in range(v['len']):
                 data_keys.append(k + "." + str(i))
                 is_embedding[k + "." + str(i)] = True
+                is_int[k + "." + str(i)] = False
         else:
             data_keys.append(k)
             is_embedding[k] = (v['type'] == 'embedding')
+            is_int[k] = (v['type'] == 'int')
 
     data_indices = {k: i for i, k in enumerate(data_keys)}
 
@@ -42,13 +46,14 @@ def parse_yaml(yaml_path):
             choice_keys[k] = choices
             choice_indices[k] = {choice: i for i, choice in enumerate(choices)}
 
-    return data_keys, data_indices, is_embedding, slice_keys, choice_keys, choice_indices
+    return data_keys, data_indices, is_embedding, is_int, slice_keys, choice_keys, choice_indices
 
 builtins = {
     "data", 
     "data_keys", 
     "data_indices", 
     "is_embedding",
+    "is_int",
     "slice_keys",
     "choice_keys",
     "choice_indices",
@@ -60,6 +65,7 @@ class thought_object():
         data_keys,
         data_indices,
         is_embedding,
+        is_int,
         slice_keys,
         choice_keys,
         choice_indices,
@@ -68,6 +74,7 @@ class thought_object():
         self.data_keys = data_keys
         self.data_indices = data_indices
         self.is_embedding = is_embedding
+        self.is_int = is_int
         self.slice_keys = slice_keys
         self.choice_keys = choice_keys
         self.choice_indices = choice_indices
@@ -76,7 +83,7 @@ class thought_object():
         if data is None:
             self.data = torch.zeros(len(data_keys))
         else:
-            self.data = data
+            self.data = torch.Tensor(data)
 
     def is_data(self, key):
         return key in self.data_key_set
@@ -92,10 +99,14 @@ class thought_object():
                 out = self.data[self.slice_keys[key]]
                 if self.is_embedding[key]:
                     out = [get_name(int(o.item())) for o in out]
+                if self.is_int[key]:
+                    out = [int(out.item()) for o in out]
             else:
                 out = self.data[self.data_indices[key]]
                 if self.is_embedding[key]:
                     out = get_name(int(out.item()))
+                if self.is_int[key]:
+                    out = int(out.item())
                 elif key in self.choice_keys:
                     out = self.choice_keys[key][int(out.item())]
             return out

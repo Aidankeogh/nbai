@@ -8,6 +8,9 @@ class Possession(thought_object):
     def __init__(self, data=None):
         super().__init__(*possession_args, data=data)
 
+    def __repr__(self):
+        return f"{self.offense_team}: {self.offense_score} -> {self.defense_team}: {self.defense_score}"
+
 @timeit
 def parse_possession(in_data, out_data):
     possession = Possession()

@@ -1,95 +1,14 @@
-from pbpstats.resources.possessions.possession import Possession
-from src.data.box_stat_parser import parse_box_stats
-from src.data.box_stats import box_stats
-import yaml
+from pbpstats.data_loader import StatsNbaPossessionLoader, StatsNbaGameFinderLoader
+from src.utilities.global_timers import timeit, timers
+from src.data.data_utils import team_name, get_prev
+from src.data.box_stats import box_stats, parse_box_stats
+from src.data.play import Play, parse_play, split_events
+from src.data.possession import Possession, parse_possession
+from src.data.game import Game, parse_game
+from collections import defaultdict
 import os
 import numpy as np
 import torch
-from pbpstats.data_loader import StatsNbaPossessionLoader, StatsNbaGameFinderLoader
-from collections import defaultdict
-from src.data.play_parser import split_events, parse_play
-from src.data.play import Play
-from src.data.data_utils import team_name
-from src.utilities.global_timers import timeit, timers
-from src.h5_db import get_connection
-
-FOUL = 6
-def time_to_seconds(time, period):
-    return ((4 - period) * 12 * 60) + int(time.split(":")[0]) * 60 + int(time.split(":")[1])
-
-def get_prev(prev, key, default=0):
-    prev = prev
-    if len(prev) == 0: 
-        prev_val = default
-    else:
-        prev_val = prev[-1][key]
-    return prev_val
-
-@timeit
-def parse_possession(in_data, out_data):
-    possession = {}
-    raw_possession = in_data['possession']
-    possession['game_idx'] = len(out_data["games"])
-    is_first = possession['game_idx'] != get_prev(out_data['possessions'], 'game_idx', -1)
-    possession['start_idx'] = get_prev(out_data['possessions'], 'end_idx')
-    possession['end_idx'] = len(out_data['plays'])
-    plays = out_data['plays'][possession['start_idx']:possession['end_idx']]
-    plays = [Play(p) for p in plays]
-    if len(plays) == 0:  # bad possession, skip
-        return [], possession
-
-    offensive_team = None
-    offensive_team = plays[0].offense_team
-    defense_team = plays[0].offense_team
-
-    possession['scores'] = get_prev(out_data['possessions'], 'scores', defaultdict(int))
-    possession['penalty_fouls'] = get_prev(out_data['possessions'], 'scores', defaultdict(int))
-    prev_period = get_prev(out_data['possessions'], 'period', -1)
-    if is_first:
-        possession['scores'] = defaultdict(int)
-
-    possession['period'] = raw_possession.data['period']
-    if possession['period'] != prev_period:  # reset penalty on new period
-        possession['penalty_fouls'] = defaultdict(int)
-        
-    possession['score_change'] = sum([int(play.score_change) for play in plays])
-    possession['foul_change'] = sum(
-        [int(play.counts_towards_penalty) for play in raw_possession.events if play.event_type == FOUL]
-    )
-
-    possession['scores'][offensive_team] += possession['score_change']
-    possession['scores'][defense_team] += 0
-    possession['penalty_fouls'][defense_team] += possession['foul_change']
-    possession['penalty_fouls'][offensive_team] += 0
-
-    possession['offense_team'] = offensive_team
-    possession['defense_team'] = defense_team
-    possession['period'] = raw_possession.data['period']
-    possession['start_time'] = time_to_seconds(raw_possession.start_time,  possession['period'])
-    possession['end_time'] = time_to_seconds(raw_possession.end_time,  possession['period'])
-    out_data['possessions'].append(possession)
-
-@timeit
-def parse_game(in_data, out_data):
-    raw_game = in_data['game']
-    game = {}
-    game['start_idx'] = get_prev(out_data['games'], 'end_idx')
-    game['end_idx'] = len(out_data['plays'])
-
-    game['start_pos_idx'] = get_prev(out_data['games'], 'end_pos_idx')
-    game['end_pos_idx'] = len(out_data['possessions'])
-
-    game['date'] = raw_game.data['date']
-    possessions = out_data['possessions'][game['start_pos_idx']: game['end_pos_idx']]
-    game['scores'] = defaultdict(int)
-
-    for possession in possessions:
-        for k, v in possession['scores'].items():
-            game['scores'][k] += v
-    game['id'] = raw_game.data['game_id']
-    game['home_team'] = team_name(raw_game.data['home_team_id'])
-    game['away_team'] = team_name(raw_game.data['visitor_team_id'])
-    out_data['games'].append(game)
 
 @timeit
 def parse_season(in_data, out_data):
@@ -127,16 +46,15 @@ def parse_season(in_data, out_data):
 
 def dump_season(out_data, db):
     season = out_data['seasons'][-1]
-    key = os.path.join(season['year'], season['type'], 'plays')
-    plays = out_data['plays']
-    print(len(plays))
-    print(type(plays))
-    print(plays[0])
-    db[key] = torch.stack(plays).numpy()
+    play_key = "/".join([season['year'], season['type'], 'plays'])
+    db[play_key] = torch.stack(out_data['plays'])
+    possession_key = "/".join([season['year'], season['type'], 'possessions'])
+    db[possession_key] = torch.stack(out_data['possessions'])
+    possession_key = "/".join([season['year'], season['type'], 'games'])
+    db[possession_key] = torch.stack(out_data['games'])
 
 @timeit
 def load_stats(config, db, years=range(2001,2020)):
-    #db.set_namespace(config['loader']['key'])
 
     out_data = {
         'seasons': [],
@@ -171,13 +89,18 @@ def load_stats(config, db, years=range(2001,2020)):
                 parse_possession(in_data, out_data)
             parse_game(in_data, out_data)
         parse_season(in_data, out_data)
-        dump_season(out_data, db)
-        print(timers.total())
+    dump_season(out_data, db)
     return out_data
 
-db = get_connection({}, name="test")
-load_stats(None, db, years=range(2018,2019))
-
-plays = db['2018-19/Playoffs/plays']
-print(len(plays))
-print(plays[0])
+if __name__ == "__main__":
+    from src.h5_db import get_connection 
+    db = get_connection({}, name="test2")
+    out_data = load_stats(None, db, years=[2018])
+    box_stats = out_data['seasons'][0]['stats']['GSW']
+    print(box_stats)
+    steph_stats = box_stats['stephen-curry',:]
+    incorrect_steph_stats = [379, 155, 73, 64, 162, 41, 38, 9, 82, 81, 26, 11, 43, 34, 1300, -1151, 1228, 1247]
+    # This is not quite correct, check out https://www.basketball-reference.com/teams/GSW/2018.html#playoffs_totals
+    print(steph_stats)
+    print(list(steph_stats))
+    assert list(steph_stats) == incorrect_steph_stats

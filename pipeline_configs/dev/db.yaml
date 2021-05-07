@@ -1,5 +1,0 @@
-module: h5_db
-version: dev.0.0.0
-deps: []
-
-args: {}

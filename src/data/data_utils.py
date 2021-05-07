@@ -47,3 +47,13 @@ def team_id(teamname):
     else:
         return 0
 
+def time_to_seconds(time, period):
+    return ((4 - period) * 12 * 60) + int(time.split(":")[0]) * 60 + int(time.split(":")[1])
+
+def get_prev(prev, key, default=0):
+    prev = prev
+    if len(prev) == 0: 
+        prev_val = default
+    else:
+        prev_val = prev[-1][key]
+    return prev_val

@@ -1,5 +1,5 @@
 
-from os import name
+import os
 from torch import tensor
 import numpy as np
 import h5py
@@ -7,7 +7,14 @@ import pickle
 
 class h5py_wrapper:
     def __init__(self, name, dir="cache"):
-        self.f = h5py.File(dir + '/' + name + '.hdf5', 'w')
+        filename = dir + '/' + name + '.hdf5'
+        try:
+            self.f = h5py.File(filename, 'w')
+        except OSError as e:
+            os.remove(filename)
+            print(f"Previous {filename} DB deleted due to following error: {e}")
+            self.f = h5py.File(filename, 'w')
+
         self.set_namespace("root")
 
     def set_namespace(self, namespace):

@@ -1,7 +1,0 @@
-module: batch_loader
-version: fakes.0.0.0
-deps: []
-
-args:
-  years:
-    - 2017

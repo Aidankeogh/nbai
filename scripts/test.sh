@@ -8,7 +8,6 @@ python src/data/play.py
 python src/data/possession.py
 python src/data/batch_loader.py
 python src/thought_path.py
-python src/h5_db.py
 
 end=`date +%s`
 echo $((end-start))

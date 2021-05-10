@@ -4,4 +4,5 @@ possessions
 dump.rdb
 *.pyc
 *.mdb
+*.h5
 prebuilt_datasets*

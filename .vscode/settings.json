@@ -1,0 +1,7 @@
+{
+    "jupyter.jupyterServerType": "local",
+    "terminal.integrated.shellArgs.linux": ["environment.sh"],
+    "terminal.integrated.shellArgs.osx": ["environment.sh"],
+    "terminal.integrated.shellArgs.windows": ["environment.sh"],
+    "python.terminal.executeInFileDir": false,
+}

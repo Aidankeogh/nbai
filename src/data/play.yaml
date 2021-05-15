@@ -1,0 +1,181 @@
+offense_team:
+  type: embedding
+
+defense_team:
+  type: embedding
+
+offense_roster:
+  type: embedding_list
+  len: 5
+
+defense_roster:
+  type: embedding_list
+  len: 5
+
+is_second_chance:
+  type: bool
+
+initial_event:
+  type: choice
+  choices: [shot, turnover, foul_over_limit, tech, flagrant]
+
+shooter:
+  type: embedding
+  choices: offense_roster
+  triggers: 
+    - initial_event: shot
+
+shot_made:
+  type: bool
+  triggers: 
+    - initial_event: shot
+  
+is_3:
+  type: bool
+  triggers:
+    - initial_event: shot
+
+shot_distance:
+  type: scalar
+  triggers:
+    - initial_event: shot
+
+shot_type:
+  type: choice
+  choices: [Arc3, Corner3, LongMidRange, AtRim, ShortMidRange]
+
+shot_fouled:
+  type: bool
+  triggers:
+    - initial_event: shot 
+
+shooting_fouler:
+  type: embedding
+  choices: defense_roster
+  triggers: 
+    - shot_fouled: true
+
+assisted:
+  type: bool
+  triggers:
+    - initial_event: shot
+
+assister:
+  type: embedding
+  choices: offense_roster
+  triggers:
+    - initial_event: shot 
+
+blocked: 
+  type: bool
+  triggers: 
+    - shot_made: false 
+
+blocker: 
+  type: embedding
+  choices: offense_roster
+  triggers: 
+    - blocked: true  
+
+turnoverer:
+  type: embedding
+  choices: offense_roster
+  triggers: 
+    - initial_event: turnover
+
+offensive_foul:
+  type: bool
+  triggers:
+    - initial_event: turnover
+
+offensive_fouler:
+  type: embedding
+  choices: offense_roster
+  triggers:
+    - offensive_foul: true
+
+offensive_foul_drawer:
+  type: embedding
+  choices: defense_roster
+  triggers:
+    - offensive_foul: true
+
+stolen: 
+  type: bool
+  triggers: 
+    - initial_event: turnover
+
+stealer:
+  type: embedding
+  choices: offense_roster
+  triggers: 
+    - stolen: true
+
+common_fouler:
+  type: embedding
+  choices: defense_roster
+
+common_foul_drawer:
+  type: embedding
+  choices: defense_roster
+
+over_limit_fouler:
+  type: embedding
+  choices: defense_roster
+  triggers:
+    - initial_event: foul_over_limit
+
+over_limit_foul_drawer:
+  type: embedding
+  choices: offense_roster
+  triggers:
+    - initial_event: foul_over_limit
+
+first_free_throw_made:
+  type: bool
+  triggers:
+    - initial_event: foul_over_limit
+    - shot_fouled: true
+      shot_made: false
+
+middle_free_throw_made:
+  type: bool
+  weight_share: first_free_throw_made
+  triggers:
+    - shot_fouled: true
+      3_point_shot: true
+      shot_made: false
+
+last_free_throw_made:
+  type: bool
+  weight_share: first_free_throw_made
+  triggers:
+    - initial_event: foul_over_limit
+    - shot_fouled: true
+
+free_thrower:
+  type: embedding
+  choices: offense_roster
+  triggers:
+    - initial_event: foul_over_limit
+    - shot_fouled: true
+      shot_made: false
+
+rebound_type:
+  type: choice
+  choices: [offensive, defensive]
+  triggers:
+    - shot_made: false
+    - last_free_throw_made: false
+
+offensive_rebounder:
+  type: embedding
+  choices: offense_roster
+  triggers:
+    - rebound_type: offensive
+
+defensive_rebounder:
+  type: embedding
+  choices: defense_roster
+  triggers:
+    - rebound_type: defensive

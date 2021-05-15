@@ -1,5 +1,5 @@
 import torch
-from datetime import datetime
+from datetime import datetime, time
 from torch.nn import functional as F
 from torch import nn
 from src.pow_dataset import NbaPosessionDataset
@@ -14,33 +14,25 @@ class pownet(nn.Module):
 
         def forward(self, x):
             for _ in range(10):
-                x[:, 4][x[:, 4] <= 0] += 300 # overtime
-            time_left = (x[:, 4:5] / 2880.0)
-            x[:, 2][x[:, 2] > 6] = 6
-            x[:, 3][x[:, 3] > 6] = 6
+                x[:, 2][x[:, 2] <= 0] += 300 # overtime
+            time_left = (x[:, 2] / 2880.0)
             score_diff = x[:, 0] - x[:, 1]
-            penalty_diff = x[:, 2] - x[:, 3]
-            time_feature = x[:, 4:5]
             
-            state_vec = torch.stack((score_diff, penalty_diff), dim=1)
+            state_vec = torch.stack((score_diff, time_left), dim=1)
             state_vec = self.bn(state_vec)
             order_1 = self.order_1(state_vec)
-            order_2 = self.order_2(state_vec) / torch.sqrt(time_left)
+            order_2 = self.order_2(state_vec) / torch.sqrt(time_left.view(order_1.shape))
             out = torch.sigmoid(order_1 + order_2)
             return out
 
 def train_model(
-        config,
-        db, 
+        dataset,
         epochs=20, 
         batch_size=3200,
         base_lr=1e-4,
         max_lr=1e-2,
         momentum=0.9,
     ):
-    db.set_namespace(config['dataset']['key'])
-    dataset = NbaPosessionDataset(prebuilt_path=db['save_path'].decode())
-    print(f"Dataset loaded, len {len(dataset)}")
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
 
@@ -60,15 +52,20 @@ def train_model(
     running_loss = 0
     for epoch in range(epochs):
         epoch_start = datetime.now()
-        for start_state, _, label in train_loader:
+        tp = 0
+        total = 0
+        for label in train_loader:
+            start_state = label[:, 0:3]
             start_prob = net(start_state.to(device))
-            #end_prob = net(end_state.to(device))
-            loss = criterion(start_prob, label.to(device))# + criterion(end_prob, label.to(device))
+            win_target = (label[:, 6] > label[:, 7]).float().to(device)
+            loss = criterion(start_prob.view(-1), win_target)
+            tp += ((start_prob.view(-1) > 0.5) == win_target).sum()
+            total += len(win_target)
             running_loss += loss.item()
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
             scheduler.step()
         seconds = int((datetime.now() - epoch_start).total_seconds())
-        print(f"e{epoch}:\tloss {running_loss:.3f}\ttime {seconds}\tlabel {label[0].item()}\tpred {start_prob[0].item():.3f}\tfeat{start_state[0].long().tolist()}")
+        print(f"e{epoch}:\tloss {running_loss:.3f}\tacc {tp * 1.0 / total:.3f}\ttime {seconds}\tlabel {win_target[0].item()}\tpred {start_prob[0].item():.3f}\tfeat{start_state[0].long().tolist()}")
         running_loss = 0

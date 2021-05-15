@@ -1,10 +1,10 @@
-from src.thought_path import parse_yaml, thought_object
+from src.thought_path import parse_yaml, ThoughtPath
 from src.utilities.global_timers import timeit
 from src.data.play import Play
 from src.data.data_utils import time_to_seconds, FOUL
 
 possession_args = parse_yaml("src/data/possession.yaml")
-class Possession(thought_object):
+class Possession(ThoughtPath):
     def __init__(self, data=None):
         super().__init__(*possession_args, data=data)
 

@@ -1,4 +1,4 @@
-from src.thought_path import parse_yaml, thought_object
+from src.thought_path import parse_yaml, ThoughtPath
 from src.utilities.global_timers import timeit
 from src.data.data_utils import (
     player_name, 
@@ -15,7 +15,8 @@ from src.data.data_utils import (
 )
 
 play_args = parse_yaml("src/data/play.yaml")
-class Play(thought_object):
+data_keys, data_indices, is_embedding, is_int, slice_keys, choice_keys, choice_indices, triggers, types = play_args
+class Play(ThoughtPath):
     def __init__(self, data=None):
         super().__init__(*play_args, data=data)
 
@@ -27,6 +28,37 @@ class Play(thought_object):
                     self.last_free_throw_made)
         else:
             return super().__getattr__(key)
+    
+    def __repr__(self) -> str:
+        out_str = ""
+        if self.shooter:
+            out_str += f"{self.shooter} "
+            out_str += "made " if self.shot_made else "missed " 
+            out_str += "3 point " if self.is_3 else "2 point "
+            out_str += f"{self.shot_type} " # TODO: Fix shot distance
+            if self.shooting_fouler:
+                out_str += f"fouled by {self.shooting_fouler} "
+            if self.assister:
+                out_str += f"assisted by {self.assister} "
+            if self.blocker:
+                out_str += f"blocked by {self.blocker} "
+        if self.over_limit_fouler:
+            out_str += f"| {self.over_limit_foul_drawer} fouled by {self.over_limit_fouler} "
+        if self.free_thrower:
+            fts_made= self.first_free_throw_made + self.middle_free_throw_made + self.last_free_throw_made
+            out_str += f"| {self.free_thrower} made {fts_made} fts "
+        if self.turnoverer:
+            out_str += f"| Turnover by {self.turnoverer} "
+            if self.stealer:
+                out_str += f" stolen by {self.stealer} "
+        if self.offensive_fouler:
+            out_str += f"| Offensive foul by {self.offensive_fouler} "
+        if self.offensive_rebounder:
+            out_str += f"| Offensive rebound by {self.offensive_rebounder} "
+        if self.defensive_rebounder:
+            out_str += f"| Defensive rebound by {self.defensive_rebounder} "
+                
+        return out_str
 
 @timeit
 def parse_play(in_data, out_data):
@@ -186,3 +218,4 @@ if __name__ == "__main__":
     assert(p.offense_roster[1] == "stephen-curry")
     assert(p.shooter == "stephen-curry")
     print(p.offense_roster)
+    print(p)

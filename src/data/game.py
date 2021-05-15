@@ -1,10 +1,10 @@
-from src.thought_path import parse_yaml, thought_object
+from src.thought_path import parse_yaml, ThoughtPath
 from src.utilities.global_timers import timeit
 from src.data.possession import Possession
 from src.data.data_utils import team_name
 
 play_args = parse_yaml("src/data/game.yaml")
-class Game(thought_object):
+class Game(ThoughtPath):
     def __init__(self, data=None):
         super().__init__(*play_args, data=data)
     

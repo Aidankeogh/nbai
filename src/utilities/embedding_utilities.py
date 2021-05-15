@@ -44,8 +44,13 @@ with open("metadata/name_to_idx.msgpack", "rb") as f:
 with open("metadata/idx_to_name.msgpack", "rb") as f:
     idx_to_name = msgpack.load(f) 
 
+n_players = len(idx_to_name)
+
 def get_name(idx):
-    return idx_to_name[idx]
+    name = idx_to_name[idx]
+    if name == "none":
+        name = None
+    return name
 
 def get_idx(name):
     if name is None:

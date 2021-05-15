@@ -1,10 +1,10 @@
 
 
-from src.thought_path import parse_yaml, thought_object
+from src.thought_path import parse_yaml, ThoughtPath
 from src.utilities.global_timers import timeit
 
 season_args = parse_yaml("src/data/season.yaml")
-class Season(thought_object):
+class Season(ThoughtPath):
     def __init__(self, data=None):
         super().__init__(*season_args, data=data)
 

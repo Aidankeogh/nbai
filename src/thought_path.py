@@ -45,8 +45,13 @@ def parse_yaml(yaml_path):
                 
             choice_keys[k] = choices
             choice_indices[k] = {choice: i for i, choice in enumerate(choices)}
-
-    return data_keys, data_indices, is_embedding, is_int, slice_keys, choice_keys, choice_indices
+    triggers = {}
+    types = {}
+    for k, v in path.items():
+        if 'triggers' in v:
+            triggers[k] = v['triggers']
+        types[k] = v['type']
+    return data_keys, data_indices, is_embedding, is_int, slice_keys, choice_keys, choice_indices, triggers, types
 
 builtins = {
     "data", 
@@ -58,8 +63,10 @@ builtins = {
     "choice_keys",
     "choice_indices",
     "data_key_set",
+    "triggers",
+    "types",
 }
-class thought_object():
+class ThoughtPath():
     def __init__(
         self, 
         data_keys,
@@ -69,6 +76,8 @@ class thought_object():
         slice_keys,
         choice_keys,
         choice_indices,
+        triggers,
+        types,
         data=None):
 
         self.data_keys = data_keys
@@ -78,6 +87,8 @@ class thought_object():
         self.slice_keys = slice_keys
         self.choice_keys = choice_keys
         self.choice_indices = choice_indices
+        self.triggers = triggers
+        self.types = types
         self.data_key_set = set(data_keys + list(slice_keys.keys()))
 
         if data is None:
@@ -92,7 +103,7 @@ class thought_object():
         return self.data_keys
 
     def __getattr__(self, key):
-        if key in builtins:
+        if key in builtins and hasattr(self, key):
             return super().__getattr__(key)
         elif self.is_data(key):
             if key in self.slice_keys:
@@ -134,4 +145,4 @@ class thought_object():
 if __name__ == "__main__":
     args = parse_yaml("src/data/play.yaml")
 
-    t = thought_object(*args)
+    t = ThoughtPath(*args)

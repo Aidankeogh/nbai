@@ -6,3 +6,5 @@ dump.rdb
 *.mdb
 *.h5
 prebuilt_datasets*
+lightning_logs*
+MNIST*

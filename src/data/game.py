@@ -1,12 +1,12 @@
-from src.thought_path import parse_yaml, ThoughtPath
+from src.thought_path import DataConfig, ThoughtPath
 from src.utilities.global_timers import timeit
 from src.data.possession import Possession
 from src.data.data_utils import team_name
 
-play_args = parse_yaml("src/data/game.yaml")
+game_config = DataConfig("src/data/game.yaml")
 class Game(ThoughtPath):
     def __init__(self, data=None):
-        super().__init__(*play_args, data=data)
+        super().__init__(game_config, data=data)
     
     def __repr__(self):
         return f"{self.away_team}: {self.away_team_score} @ {self.home_team}: {self.home_team_score}"

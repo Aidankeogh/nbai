@@ -1,12 +1,12 @@
 
 
-from src.thought_path import parse_yaml, ThoughtPath
+from src.thought_path import DataConfig, ThoughtPath
 from src.utilities.global_timers import timeit
 
-season_args = parse_yaml("src/data/season.yaml")
+season_config = DataConfig("src/data/season.yaml")
 class Season(ThoughtPath):
     def __init__(self, data=None):
-        super().__init__(*season_args, data=data)
+        super().__init__(season_config, data=data)
 
     def __repr__(self):
         playoff_str = "playoff" if self.playoffs else "regular season"

@@ -1,4 +1,4 @@
-from src.thought_path import parse_yaml, ThoughtPath
+from src.thought_path import DataConfig, ThoughtPath
 from src.utilities.global_timers import timeit
 from src.data.data_utils import (
     player_name, 
@@ -14,11 +14,13 @@ from src.data.data_utils import (
     END_OF_PERIOD,
 )
 
-play_args = parse_yaml("src/data/play.yaml")
-data_keys, data_indices, is_embedding, is_int, slice_keys, choice_keys, choice_indices, triggers, types = play_args
+play_config = DataConfig("src/data/play.yaml")
+data_keys = play_config.data_keys
+slice_keys = play_config.slice_keys
+
 class Play(ThoughtPath):
     def __init__(self, data=None):
-        super().__init__(*play_args, data=data)
+        super().__init__(play_config, data=data)
 
     def __getattr__(self, key):
         if key == "score_change":
@@ -35,7 +37,8 @@ class Play(ThoughtPath):
             out_str += f"{self.shooter} "
             out_str += "made " if self.shot_made else "missed " 
             out_str += "3 point " if self.is_3 else "2 point "
-            out_str += f"{self.shot_type} " # TODO: Fix shot distance
+            shot_type = max(self.shot_type, key=self.shot_type.get)
+            out_str += f"{shot_type} " # TODO: Fix shot distance
             if self.shooting_fouler:
                 out_str += f"fouled by {self.shooting_fouler} "
             if self.assister:
@@ -80,7 +83,7 @@ def parse_play(in_data, out_data):
             parse_foul(play, event)
         if event.event_type == TURNOVER:
             parse_turnover(play, event)
-    if play.offense_team == "none" or play.defense_team == "none":
+    if play.offense_team is None or play.defense_team is None:
         return
         #raise Exception("ERROR")
     out_data['plays'].append(play.data)
@@ -139,7 +142,7 @@ def parse_foul(play, event):
     fouled = player_name(event.data['player3_id'] if 'player3_id' in event.data else 0)
     fouler = player_name(event.data['player1_id'] if 'player1_id' in event.data else 0)
 
-    if event.is_offensive_foul:
+    if event.is_offensive_foul or event.data["event_action_type"] == 26:
         play.offensive_foul = True
         play.offensive_fouler = fouler
         play.offensive_foul_drawer = fouled
@@ -149,22 +152,24 @@ def parse_foul(play, event):
         play.shot_fouled = 1
         play.shooting_fouler = fouler
         play.shooter = fouled
-        if fouler != 0 and play.shooting_fouler not in play.defense_roster:
-            print("Shooting", event)
-            return
+        # if the player isn't there (substitution) keep walking back until they are there
+        prev_event = event.previous_event
+        while (play.shooting_fouler not in play.defense_roster):
+            parse_teams(play, prev_event)
+            prev_event = prev_event.previous_event
+        
     elif event.number_of_fta_for_foul:
         parse_teams(play, event)
         play.initial_event = "foul_over_limit"
         play.over_limit_fouler = fouler
         play.over_limit_foul_drawer = fouled
         if play.over_limit_fouler not in play.defense_roster:
-            #print("over_limit", event)
             return
     else:
+        parse_teams(play, event)
         play.common_fouler = fouler
         play.common_foul_drawer = fouled
-        if play.common_fouler in play.defense_roster:
-            #print("common", event)
+        if play.common_fouler not in play.defense_roster:
             return
     
 def parse_turnover(play, event):
@@ -215,7 +220,10 @@ if __name__ == "__main__":
     p.shooter = curry
     p.offense_roster = [curry, curry, kd, kd, kd]
     p.defense_roster = [lebron, lebron, lebron, lebron, lebron]
+    #p.shot_type = "LongMidRange"
+    p.shot_type = [0.5, 0.3, 0.1, 0.1, 0]
     assert(p.offense_roster[1] == "stephen-curry")
     assert(p.shooter == "stephen-curry")
     print(p.offense_roster)
+    print(p.shot_type_longmidrange)
     print(p)

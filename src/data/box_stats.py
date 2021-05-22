@@ -40,7 +40,7 @@ class Box_stats:
 
     def __setitem__(self, key, value):
         player, category = key
-        if player != "none":
+        if player is not None:
             #if player not in self.player_idxes:
                 #print(player, self.player_idxes, value)
             player_idx = self.player_idxes[player]
@@ -57,7 +57,7 @@ class Box_stats:
     def __repr__(self):
         table = []
         for player in sorted(self.roster):
-            if player != "none":
+            if player is not None:
                 table.append([player] + list(self[player, :]))
         return tabulate(table, headers=[' '] + categories)
 
@@ -77,14 +77,14 @@ def parse_box_stats(play, rosters):
         d_stats[player, 'd_pos'] = 1 - play.is_second_chance
         d_stats[player, 'd+-'] = -play.score_change
 
-    if play.shooter != "none":
+    if play.shooter is not None:
         o_stats[play.shooter, '2pa'] = not play.is_3
         o_stats[play.shooter, '2pm'] = play.shot_made and not play.is_3
         o_stats[play.shooter, '3pa'] = play.is_3
         o_stats[play.shooter, '3pm'] = play.shot_made and play.is_3
         o_stats[play.shooter, 'pts'] += play.shot_made * (2 + play.is_3)
 
-    if play.free_thrower != "none" and play.free_thrower in o_stats.player_idxes:
+    if play.free_thrower is not None and play.free_thrower in o_stats.player_idxes:
         #o_stats[play.o_ft, 'fta'] = play.ft_made + play.ft_missed
         n_free_throws = (play.initial_event == "foul_over_limit") * 2
         if play.shot_made and play.shot_fouled:
@@ -100,26 +100,26 @@ def parse_box_stats(play, rosters):
         o_stats[play.free_thrower, 'fta'] = n_free_throws
         o_stats[play.free_thrower, 'pts'] += free_throws_made
 
-    if play.defensive_rebounder != "none":
+    if play.defensive_rebounder is not None:
         d_stats[play.defensive_rebounder, 'drb'] = 1
 
-    if play.offensive_rebounder != "none":
+    if play.offensive_rebounder is not None:
         o_stats[play.offensive_rebounder, 'orb'] = 1
 
-    if play.assister != "none":
+    if play.assister is not None:
         o_stats[play.assister, 'ast'] = 1
-    if play.stealer != "none":
+    if play.stealer is not None:
         d_stats[play.stealer, 'stl'] = 1
-    if play.blocker != "none":
+    if play.blocker is not None:
         d_stats[play.blocker, 'blk'] = 1
-    if play.turnoverer != "none":
+    if play.turnoverer is not None:
         o_stats[play.turnoverer, 'tov'] = 1
 
-    if play.over_limit_fouler != "none" and play.over_limit_fouler in d_stats.player_idxes:
+    if play.over_limit_fouler is not None and play.over_limit_fouler in d_stats.player_idxes:
         d_stats[play.over_limit_fouler, 'pfs'] = 1
-    if play.shooting_fouler != "none" and play.shooting_fouler in d_stats.player_idxes:
+    if play.shooting_fouler is not None and play.shooting_fouler in d_stats.player_idxes:
         d_stats[play.shooting_fouler, 'pfs'] = 1
-    if play.common_fouler != "none" and play.common_fouler in d_stats.player_idxes:
+    if play.common_fouler is not None and play.common_fouler in d_stats.player_idxes:
         d_stats[play.common_fouler, 'pfs'] = 1
     
     return o_stats, d_stats

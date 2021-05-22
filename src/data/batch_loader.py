@@ -12,7 +12,7 @@ import os
 
 def dump_season(out_data, db):
     season = Season(out_data["season_info"])
-    base_key = str(int(season.year)) + "_" + ("playoffs" if season.playoffs else "regular")
+    base_key = "raw_data/" + str(int(season.year)) + "_" + ("playoffs" if season.playoffs else "regular")
 
     play_key = base_key + "/" + "plays"
     db[play_key] = torch.stack(out_data["plays"])
@@ -27,9 +27,9 @@ def dump_season(out_data, db):
     db[season_key] = season.data
 
 @timeit
-def load_raw_data(db, years=range(2001,2020)):
+def load_raw_data(db, years=range(2001,2020), season_types=["Playoffs", "Regular Season"]):
     season_iter = []
-    for season_type in ["Playoffs", "Regular Season"]:
+    for season_type in season_types:
         season_iter.extend([(y, season_type) for y in years])
 
     for in_season in season_iter:
@@ -64,16 +64,17 @@ def load_raw_data(db, years=range(2001,2020)):
             parse_game(in_data, out_data)
         parse_season(in_data, out_data)
         dump_season(out_data, db)
+    db["raw_data_loaded"] = True
     return out_data
 
 @timeit
 def accumulate_box_stats(db):
     all_stats = {}
-    for season in db:
+    for season in db["raw_data"]:
         stats = {}
         rosters = defaultdict(set)
-        season_info = Season(db[season + "/season_info"])
-        plays = db[season + "/plays"][season_info.play_start_idx:season_info.play_end_idx]
+        season_info = Season(db[f"raw_data/{season}/season_info"])
+        plays = db[f"raw_data/{season}/plays"][season_info.play_start_idx:season_info.play_end_idx]
         plays = [Play(p) for p in plays]
 
         for play in plays:
@@ -96,11 +97,12 @@ def accumulate_box_stats(db):
         all_stats[season] = stats
 
         for k, v in stats.items():
-            db[season + "/stats/" + k] = v.data
+            print(season, k)
+            db[f"box_stats/{season}/{k}"] = v.data
             os.makedirs(f"metadata/rosters", exist_ok=True)
         with open(f"metadata/rosters/{season}", "wb") as f:
             msgpack.dump(rosters, f)
-
+    db["box_stats_accumulated"] = True
     return all_stats
 
 if __name__ == "__main__":
@@ -109,21 +111,18 @@ if __name__ == "__main__":
     db_path = "cache/batch_loader_unit_test.h5"
     if os.path.exists(db_path):
         os.remove(db_path)
-    db = h5py.File(db_path, "a")
-    out_data = load_raw_data(db, years=[2018])
-    db.close()
 
-    db = h5py.File(db_path, "a")
-    accumulate_box_stats(db)
-    with open("metadata/rosters/2018_playoffs", "rb") as f:
-        rosters = msgpack.load(f)
-    box_stats = Box_stats(rosters['GSW'], db['2018_playoffs/stats/GSW'][:])
-    db.close()
+    with h5py.File(db_path, "a") as db:
+        load_raw_data(db, years=[2018], season_types=["Playoffs"])
+        accumulate_box_stats(db)
+        with open("metadata/rosters/2018_playoffs", "rb") as f:
+            rosters = msgpack.load(f)
+        box_stats = Box_stats(rosters['GSW'], db['box_stats/2018_playoffs/GSW'][:])
 
     print(box_stats)
     steph_stats = box_stats['stephen-curry', :]
-    incorrect_steph_stats = [379, 155, 73, 64, 162, 41, 38, 9, 82, 81, 26, 11, 43, 34, 1300, -1151, 1228, 1247]
+    incorrect_steph_stats = [379, 155, 73, 64, 162, 41, 36, 9, 82, 81, 26, 11, 43, 34, 1300, -1151, 1228, 1247]
     # This is not quite correct, check out https://www.basketball-reference.com/teams/GSW/2018.html#playoffs_totals
-    print(steph_stats)
+    print(incorrect_steph_stats)
     print(list(steph_stats))
     assert list(steph_stats) == incorrect_steph_stats

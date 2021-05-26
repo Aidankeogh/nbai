@@ -185,3 +185,4 @@ if __name__ == "__main__":
     cfg = DataConfig("src/data/play.yaml")
 
     t = ThoughtPath(cfg)
+    print(t.triggers)

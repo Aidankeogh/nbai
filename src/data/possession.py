@@ -36,7 +36,7 @@ def parse_possession(in_data, out_data):
         return
 
     possession.offense_team = plays[0].offense_team
-    possession.defense_team = plays[0].offense_team
+    possession.defense_team = plays[0].defense_team
 
     switched = possession.offense_team != prev.offense_team
     possession.offense_score = prev.defense_score if switched else prev.offense_score

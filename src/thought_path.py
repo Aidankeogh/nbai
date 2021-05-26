@@ -3,7 +3,9 @@ import torch
 from src.utilities.embedding_utilities import get_name, get_idx
 
 import oyaml
-class DataConfig():
+
+
+class DataConfig:
     def __init__(self, yaml_path):
         path = oyaml.load(open(yaml_path, "r"), Loader=oyaml.Loader)
 
@@ -18,11 +20,11 @@ class DataConfig():
         self.choice_keys = {}
         self.choice_indices = {}
         for k, v in path.items():
-            if v['type'] == 'embedding_list':
+            if v["type"] == "embedding_list":
                 self.is_embedding[k] = True
                 self.is_int[k] = False
                 self.is_choice[k] = False
-                for i in range(v['len']):
+                for i in range(v["len"]):
                     sub_key = k + "_" + str(i)
                     self.data_indices[sub_key] = len(self.data_keys)
                     self.data_keys.append(sub_key)
@@ -31,17 +33,19 @@ class DataConfig():
                 start = self.data_indices[k + "_0"]
                 end = len(self.data_keys)
                 self.slice_keys[k] = slice(start, end)
-            elif v['type'] == 'choice':
+            elif v["type"] == "choice":
                 self.is_embedding[k] = False
                 self.is_int[k] = False
                 self.is_choice[k] = True
-                if type(v['choices']) is list:
-                    choices = v['choices']
+                if type(v["choices"]) is list:
+                    choices = v["choices"]
                 else:
-                    choice_range = list(range(
-                        self.slice_keys[v['choices']].start,
-                        self.slice_keys[v['choices']].stop + 1
-                    ))
+                    choice_range = list(
+                        range(
+                            self.slice_keys[v["choices"]].start,
+                            self.slice_keys[v["choices"]].stop + 1,
+                        )
+                    )
                     choices = [self.data_keys[i] for i in choice_range]
                 for choice in choices:
                     sub_key = k + "_" + str(choice).lower()
@@ -49,7 +53,7 @@ class DataConfig():
                     self.data_keys.append(sub_key)
                     self.is_embedding[sub_key] = False
                     self.is_int[sub_key] = False
-                start = self.data_indices[k + "_" + str(choices[0]).lower()] 
+                start = self.data_indices[k + "_" + str(choices[0]).lower()]
                 end = len(self.data_keys)
                 self.slice_keys[k] = slice(start, end)
                 self.choice_keys[k] = choices
@@ -57,19 +61,20 @@ class DataConfig():
             else:
                 self.data_indices[k] = len(self.data_keys)
                 self.data_keys.append(k)
-                self.is_embedding[k] = (v['type'] == 'embedding')
-                self.is_int[k] = (v['type'] == 'int')
+                self.is_embedding[k] = v["type"] == "embedding"
+                self.is_int[k] = v["type"] == "int"
 
-            if 'triggers' in v:
-                self.triggers[k] = v['triggers']
-            self.types[k] = v['type']
+            if "triggers" in v:
+                self.triggers[k] = v["triggers"]
+            self.types[k] = v["type"]
 
             self.data_key_set = set(self.data_keys + list(self.slice_keys.keys()))
 
+
 builtins = {
-    "data", 
-    "data_keys", 
-    "data_indices", 
+    "data",
+    "data_keys",
+    "data_indices",
     "is_embedding",
     "is_int",
     "is_choice",
@@ -80,11 +85,10 @@ builtins = {
     "triggers",
     "types",
 }
-class ThoughtPath():
-    def __init__(
-        self,
-        data_config,
-        data=None):
+
+
+class ThoughtPath:
+    def __init__(self, data_config, data=None):
 
         self.data_keys = data_config.data_keys
         self.data_indices = data_config.data_indices
@@ -121,7 +125,7 @@ class ThoughtPath():
                     out = [int(out.item()) for o in out]
                 if self.is_choice[key]:
                     max_prob = 0
-                    max_choice = None # All 0s / uninitialized
+                    max_choice = None  # All 0s / uninitialized
                     for choice, prob in zip(self.choice_keys[key], out):
                         if prob.item() > max_prob:
                             max_prob = prob.item()
@@ -138,14 +142,14 @@ class ThoughtPath():
             self.throw_index_err(key)
 
     def __setattr__(self, key, value):
-        if key in builtins: # all keys that we need to operate on regularly
+        if key in builtins:  # all keys that we need to operate on regularly
             return super().__setattr__(key, value)
         elif self.is_data(key):
             if key in self.slice_keys:
                 if self.is_embedding[key]:
                     value = [get_idx(o) for o in value]
                 if self.is_choice[key] and type(value) is str:
-                        value = [choice == value for choice in self.choice_keys[key]]
+                    value = [choice == value for choice in self.choice_keys[key]]
                 self.data[self.slice_keys[key]] = torch.tensor(value)
             else:
                 if self.is_embedding[key]:
@@ -153,7 +157,7 @@ class ThoughtPath():
                 self.data[self.data_indices[key]] = value
         else:
             self.throw_index_err(key)
-    
+
     def __getitem__(self, key):
         if key in self.data_keys:
             return self.data[self.data_keys[key]]
@@ -169,13 +173,12 @@ class ThoughtPath():
             self.data[self.slice_keys[key]] = value
         else:
             self.throw_index_err(key)
-    
+
     def throw_index_err(self, key):
         raise Exception(
             f"ERROR, {key} not found in {type(self)} object."
             f"Viable keys are {self.keys()}"
         )
-
 
 
 if __name__ == "__main__":

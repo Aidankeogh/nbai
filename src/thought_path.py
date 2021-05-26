@@ -107,7 +107,7 @@ class ThoughtPath():
         return key in self.data_key_set
 
     def keys(self):
-        return self.data_keys
+        return self.data_keys + list(self.slice_keys.keys())
 
     def __getattr__(self, key):
         if key in builtins and hasattr(self, key):
@@ -120,7 +120,13 @@ class ThoughtPath():
                 if self.is_int[key]:
                     out = [int(out.item()) for o in out]
                 if self.is_choice[key]:
-                    out = {k: float(v.item()) for k, v in zip(self.choice_keys[key], out)}
+                    max_prob = 0
+                    max_choice = None # All 0s / uninitialized
+                    for choice, prob in zip(self.choice_keys[key], out):
+                        if prob.item() > max_prob:
+                            max_prob = prob.item()
+                            max_choice = choice
+                    out = max_choice
             else:
                 out = self.data[self.data_indices[key]]
                 if self.is_embedding[key]:
@@ -129,7 +135,7 @@ class ThoughtPath():
                     out = int(out.item())
             return out
         else:
-            raise Exception(f"ERROR, attribute {key} not found")
+            self.throw_index_err(key)
 
     def __setattr__(self, key, value):
         if key in builtins: # all keys that we need to operate on regularly
@@ -146,7 +152,30 @@ class ThoughtPath():
                     value = get_idx(value)
                 self.data[self.data_indices[key]] = value
         else:
-            raise Exception(f"ERROR, attribute {key} not found")
+            self.throw_index_err(key)
+    
+    def __getitem__(self, key):
+        if key in self.data_keys:
+            return self.data[self.data_keys[key]]
+        elif key in self.slice_keys:
+            return self.data[self.slice_keys[key]]
+        else:
+            self.throw_index_err(key)
+
+    def __setitem__(self, key, value):
+        if key in self.data_keys:
+            self.data[self.data_keys[key]] = value
+        elif key in self.slice_keys:
+            self.data[self.slice_keys[key]] = value
+        else:
+            self.throw_index_err(key)
+    
+    def throw_index_err(self, key):
+        raise Exception(
+            f"ERROR, {key} not found in {type(self)} object."
+            f"Viable keys are {self.keys()}"
+        )
+
 
 
 if __name__ == "__main__":

@@ -85,17 +85,8 @@ def parse_box_stats(play, rosters):
         o_stats[play.shooter, 'pts'] += play.shot_made * (2 + play.is_3)
 
     if play.free_thrower is not None and play.free_thrower in o_stats.player_idxes:
-        #o_stats[play.o_ft, 'fta'] = play.ft_made + play.ft_missed
-        n_free_throws = (play.initial_event == "foul_over_limit") * 2
-        if play.shot_made and play.shot_fouled:
-            n_free_throws = 1
-        elif play.shot_fouled:
-            n_free_throws = 2 + play.is_3
-        free_throws_made = (
-            play.first_free_throw_made + 
-            play.middle_free_throw_made +
-            play.last_free_throw_made
-        )
+        n_free_throws = play.free_throws_attempted
+        free_throws_made = play.free_throws_made
         o_stats[play.free_thrower, 'ftm'] = free_throws_made
         o_stats[play.free_thrower, 'fta'] = n_free_throws
         o_stats[play.free_thrower, 'pts'] += free_throws_made

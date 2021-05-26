@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
     print(box_stats)
     steph_stats = box_stats['stephen-curry', :]
-    incorrect_steph_stats = [379, 155, 73, 64, 162, 41, 36, 9, 82, 81, 26, 11, 43, 34, 1300, -1151, 1228, 1247]
+    incorrect_steph_stats = [379, 142, 73, 64, 162, 41, 43, 9, 82, 81, 26, 11, 43, 34, 1300, -1151, 1228, 1247]
     # This is not quite correct, check out https://www.basketball-reference.com/teams/GSW/2018.html#playoffs_totals
     print(incorrect_steph_stats)
     print(list(steph_stats))

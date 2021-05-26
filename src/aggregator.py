@@ -7,58 +7,6 @@ from src.data.play import Play
 from src.data.game import Game
 import os
 
-# nt used helper
-def get_all_games(season,db):
-    season_info = Season(db[f"raw_data/{season}/season_info"])
-    game_indxs = [gms for gms in 
-        range(season_info.game_start_idx,season_info.game_end_idx)]
-
-    games = db[f"raw_data/{season}/games"][
-            season_info.game_start_idx : season_info.game_end_idx
-        ]
-    games = [Game(g) for g in games]
-
-    assert len(game_indxs) == season_info.game_end_idx
-    assert len(games) == len(game_indxs)
-    return (games,game_indxs)
-
-#not used helper
-def get_all_possessions(games,db):
-    possessions_indxs = []
-
-    for game in games:
-       first_pos,last_pos = (game.possession_start_idx, game.possession_end_idx)
-       if first_pos < last_pos:
-          possessions_indxs.extend(range(first_pos, last_pos))
-       else:
-           raise Exception("Possession end index smaller than start for {g}".format(g = game))
-
-    possessions= db[f"raw_data/{season}/possessions"][possessions_indxs[0] : len(possessions_indxs)]
-    possessions = [Possession(p) for p in possessions]
-
-    assert len(possessions_indxs) == games[-1].possession_end_idx
-    assert len(possessions) == len(possessions_indxs)
-    return (possessions,possessions_indxs)
-
-#not used helper
-def get_all_plays(possessions,db):
-    play_indxs = []
-    
-    for possession in possessions:
-        first_play,last_play = (possession.play_start_idx, possession.play_end_idx)
-        if first_play < last_play:
-            play_indxs.extend(range(first_play,last_play))
-        else:
-            raise Exception("Plays end index smaller than start for {p}".format(p = possession))
-        
-    plays = db[f"raw_data/{season}/plays"][play_indxs[0] : len(play_indxs)]
-    plays = [Play(p) for p in plays]
-
-    assert len(play_indxs) == possessions[-1].play_end_idx
-    assert len(plays) == len(play_indxs)
-    return (plays,play_indxs)
-
-
 class Aggregator:
     def __init__(self) -> None:
         

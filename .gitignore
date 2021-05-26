@@ -8,3 +8,4 @@ dump.rdb
 prebuilt_datasets*
 lightning_logs*
 MNIST*
+*.ipynb

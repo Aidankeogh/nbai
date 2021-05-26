@@ -131,24 +131,20 @@ over_limit_foul_drawer:
   triggers:
     - initial_event: foul_over_limit
 
-first_free_throw_made:
-  type: bool
+free_throws_made:
+  type: int
   triggers:
     - initial_event: foul_over_limit
     - shot_fouled: true
-      shot_made: false
 
-middle_free_throw_made:
-  type: bool
-  weight_share: first_free_throw_made
+free_throws_attempted:
+  type: int
   triggers:
+    - initial_event: foul_over_limit
     - shot_fouled: true
-      3_point_shot: true
-      shot_made: false
 
 last_free_throw_made:
   type: bool
-  weight_share: first_free_throw_made
   triggers:
     - initial_event: foul_over_limit
     - shot_fouled: true

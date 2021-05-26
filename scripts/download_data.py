@@ -10,8 +10,8 @@ extract_dir = "cache"
 if not os.path.exists(extract_dir):
     os.makedirs(extract_dir)
 
-with open(zip_path, 'wb') as out:
-    r = http.request('GET', url, preload_content=False)
+with open(zip_path, "wb") as out:
+    r = http.request("GET", url, preload_content=False)
     shutil.copyfileobj(r, out)
 print("Data downloaded, extracting...")
 with zipfile.ZipFile(zip_path, "r") as f:

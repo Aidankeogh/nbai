@@ -1,3 +1,4 @@
+from pbpstats.data_loader.nba_possession_loader import NbaPossessionLoader
 from src.utilities.global_timers import timeit
 from tabulate import tabulate
 import torch
@@ -78,15 +79,20 @@ def parse_box_stats(play, rosters):
         d_stats[player, 'd+-'] = -play.score_change
 
     if play.shooter is not None:
-        o_stats[play.shooter, '2pa'] = not play.is_3
+        shot_type = max(play.shot_type, key=lambda key: play.shot_type[key])
+        two_pointer = (shot_type == 'LongMidRange' or shot_type == 'AtRim' or shot_type == 'ShortMidRange')
+        three_pointer = (shot_type == 'Arc3' or  shot_type == 'Corner3')
+
+        o_stats[play.shooter, '2pa'] = two_pointer
         o_stats[play.shooter, '2pm'] = play.shot_made and not play.is_3
-        o_stats[play.shooter, '3pa'] = play.is_3
+        o_stats[play.shooter, '3pa'] = three_pointer  
         o_stats[play.shooter, '3pm'] = play.shot_made and play.is_3
         o_stats[play.shooter, 'pts'] += play.shot_made * (2 + play.is_3)
 
     if play.free_thrower is not None and play.free_thrower in o_stats.player_idxes:
         #o_stats[play.o_ft, 'fta'] = play.ft_made + play.ft_missed
-        n_free_throws = (play.initial_event == "foul_over_limit") * 2
+        n_free_throws = (play.initial_event["foul_over_limit"] == 1.0) * 2
+
         if play.shot_made and play.shot_fouled:
             n_free_throws = 1
         elif play.shot_fouled:
@@ -96,9 +102,19 @@ def parse_box_stats(play, rosters):
             play.middle_free_throw_made +
             play.last_free_throw_made
         )
+
+        if free_throws_made > n_free_throws:
+            n_free_throws = free_throws_made
+
         o_stats[play.free_thrower, 'ftm'] = free_throws_made
         o_stats[play.free_thrower, 'fta'] = n_free_throws
         o_stats[play.free_thrower, 'pts'] += free_throws_made
+        
+        # sanity check 
+        if free_throws_made > n_free_throws:
+            print("freethrows made:",free_throws_made)
+            print("freethows attmpeted:",n_free_throws)
+            print(play)
 
     if play.defensive_rebounder is not None:
         d_stats[play.defensive_rebounder, 'drb'] = 1

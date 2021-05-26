@@ -33,7 +33,7 @@ class Play(ThoughtPath):
     
     def __repr__(self) -> str:
         out_str = ""
-        if self.shooter:
+        if self.shooter and self.initial_event == "shot":
             out_str += f"{self.shooter} "
             out_str += "made " if self.shot_made else "missed " 
             out_str += "3 point " if self.is_3 else "2 point "
@@ -76,6 +76,7 @@ def parse_play(in_data, out_data):
         if event.event_type == FIELD_GOAL_MISSED:
             parse_shot(play, event)
         if event.event_type == FREE_THROW:
+            ft = True
             parse_free_throw(play, event)
         if event.event_type == REBOUND:
             parse_rebound(play, event)
@@ -95,6 +96,7 @@ def parse_shot(play, event):
     play.shot_distance = event.distance if event.distance is not None else -1
     play.shot_type = event.shot_type
     play.is_3 = (event.shot_value == 3)
+
     play.shot_made = (event.event_type == FIELD_GOAL_MADE)
     
     if event.is_assisted:
@@ -121,12 +123,14 @@ def parse_free_throw(play, event):
     idx = desc.index("of")
     n_free_throws = int(desc[idx + 1])
     curr_free_throw = int(desc[idx - 1])
+    
     if curr_free_throw == n_free_throws:
         play.last_free_throw_made = event.is_made
     elif curr_free_throw == 1:
-        play.first_free_throw_made = event.is_made
+        play.first_free_throw_made = event.is_made 
     else:
         play.middle_free_throw_made = event.is_made
+        
     play.free_thrower = player_name(event.data['player1_id'])
 
 def parse_rebound(play, event):
@@ -142,6 +146,8 @@ def parse_foul(play, event):
     fouled = player_name(event.data['player3_id'] if 'player3_id' in event.data else 0)
     fouler = player_name(event.data['player1_id'] if 'player1_id' in event.data else 0)
 
+    #print(event.data)
+
     if event.is_offensive_foul or event.data["event_action_type"] == 26:
         play.offensive_foul = True
         play.offensive_fouler = fouler
@@ -152,6 +158,7 @@ def parse_foul(play, event):
         play.shot_fouled = 1
         play.shooting_fouler = fouler
         play.shooter = fouled
+
         # if the player isn't there (substitution) keep walking back until they are there
         prev_event = event.previous_event
         while (play.shooting_fouler not in play.defense_roster):
@@ -221,7 +228,7 @@ if __name__ == "__main__":
     p.offense_roster = [curry, curry, kd, kd, kd]
     p.defense_roster = [lebron, lebron, lebron, lebron, lebron]
     #p.shot_type = "LongMidRange"
-    p.shot_type = [0.5, 0.3, 0.1, 0.1, 0]
+    p.shot_type = [0, 0.5, 0.3, 0.1, 0.1, 0]
     assert(p.offense_roster[1] == "stephen-curry")
     assert(p.shooter == "stephen-curry")
     print(p.offense_roster)

@@ -17,13 +17,7 @@ class Aggregator:
         self.all_players = set()
     
     def aggregate(self, season, db):
-        season_info = Season(db[f"raw_data/{season}/season_info"])
-        game_idxs = [gms for gms in 
-        range(season_info.game_start_idx,season_info.game_end_idx)]
-
-        for game_idx in game_idxs:
-            game = Game(db[f"raw_data/{season}/games"][game_idx])
-            self.__aggregate_possessions__(season,game,game_idx,db)
+        self.__aggregate_games__(season,db)
         
         for player in self.all_players:
             games = list(self.games_indices[player])
@@ -32,6 +26,15 @@ class Aggregator:
             self.aggregation[player][season] = (games,possessions,plays)
         
         assert len(self.aggregation.keys()) == len(self.all_players)
+    
+    def __aggregate_games__(self,season,db):
+        season_info = Season(db[f"raw_data/{season}/season_info"])
+        game_idxs = [gms for gms in 
+        range(season_info.game_start_idx,season_info.game_end_idx)]
+
+        for game_idx in game_idxs:
+            game = Game(db[f"raw_data/{season}/games"][game_idx])
+            self.__aggregate_possessions__(season,game,game_idx,db)
 
     def __aggregate_possessions__(self,season,game,game_idx,db):
         possession_idxs = list(range(game.possession_start_idx,

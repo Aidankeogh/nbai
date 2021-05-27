@@ -175,3 +175,6 @@ defensive_rebounder:
   choices: defense_roster
   triggers:
     - rebound_type: defensive
+
+possession_idx:
+  type: int

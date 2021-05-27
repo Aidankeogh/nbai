@@ -69,6 +69,7 @@ def parse_play(in_data, out_data):
     if len(events) == 0:
         return
     play = Play()
+    play.possession_idx = len(out_data["possessions"])
     play.is_second_chance = index > 1
     for event in events:
         if event.event_type == FIELD_GOAL_MADE:

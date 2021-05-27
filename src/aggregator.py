@@ -1,5 +1,5 @@
 
-from src.data.batch_loader import load_raw_data,accumulate_box_stats
+from src.data.batch_loader import load_raw_data
 from src.data.possession import Possession
 from collections import defaultdict
 from src.data.season import Season
@@ -30,7 +30,7 @@ class Aggregator:
     def __aggregate_games__(self,season,db):
         season_info = Season(db[f"raw_data/{season}/season_info"])
         game_idxs = [gms for gms in 
-        range(season_info.game_start_idx,season_info.game_end_idx)]
+            range(season_info.game_start_idx,season_info.game_end_idx)]
 
         for game_idx in game_idxs:
             game = Game(db[f"raw_data/{season}/games"][game_idx])
@@ -90,8 +90,13 @@ if __name__ == "__main__":
         season = "2018_playoffs"
         aggregator = Aggregator()
         aggregator.aggregate(season,db)
-        print()
-        print()
-        print("stephen-curry stats",aggregator["stephen-curry",season])
+        games,pos,plays = aggregator["stephen-curry",season]
+
+        print(len(games))
+        print(len(pos))
+        print(len(plays))
+
+        assert len(games) == 15 # 15 is from nba statline
+        #print("stephen-curry stats",aggregator["stephen-curry",season])
    
     

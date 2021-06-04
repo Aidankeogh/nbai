@@ -10,6 +10,14 @@ class Game(ThoughtPath):
     def __init__(self, data=None):
         super().__init__(game_config, data=data)
 
+    def __getattr__(self, key):
+        if key == "plays":
+            return slice(self.plays_start_idx, self.plays_end_idx)
+        if key == "possessions":
+            return slice(self.possessions_start_idx, self.possessions_end_idx)
+        else:
+            return super().__getattr__(key)
+
     def __repr__(self):
         return f"{self.away_team}: {self.away_team_score} @ {self.home_team}: {self.home_team_score}"
 

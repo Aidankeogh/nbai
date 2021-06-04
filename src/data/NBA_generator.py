@@ -1,4 +1,4 @@
-def special_generator():
+def nba_generator():
     from src.loader_pipeline import open_db
     from src.data.play import Play
     from src.data.game import Game
@@ -8,7 +8,6 @@ def special_generator():
         games = db["raw_data/2001_playoffs/games"]
         possessions = db["raw_data/2001_playoffs/possessions"]
         plays = db["raw_data/2001_playoffs/plays"]
-        season_info = db["raw_data/2001_playoffs/season_info"]
         for game_data in games:
             game = Game(game_data)
             for possession_data in possessions[

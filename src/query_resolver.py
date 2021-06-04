@@ -5,9 +5,9 @@ actions = ["|", "_", "^", "&"]  # union  # diff  # symetric diff  # intersection
 bad_chars = ["=", "==", "?", "+", "!", "<", ">", "#", "@", "%", "*", "$"]
 min_num_valid_query_parts = 3 # just a player query
 
-class Node:
+class QueryNode:
     def __init__(self, data= None):
-        self.data = data # part of query string
+        self.query_parts = data # part of query string
         self.left = None
         self.right = None
         self.parent = None
@@ -19,11 +19,11 @@ class Node:
                 self.left.resolve_units(season, aggregator, debug)
             if self.right:
                 self.right.resolve_units(season, aggregator, debug)
-            if self.data not in actions: # so a player
-                self.units = self.grab_possessions(self.data, season, aggregator, debug)
+            if self.query_parts not in actions: # so a player
+                self.units = self.grab_possessions(self.query_parts, season, aggregator, debug)
             else:
                 self.units = self.perform_set_operation(
-                    self.left, self.right, self.data, debug
+                    self.left, self.right, self.query_parts, debug
                 )
         except Exception as error:
             print(error)
@@ -40,7 +40,7 @@ class Node:
             if debug:
                 print(
                     "Performing union on {l} and {r}".format(
-                        l=l_operand.data, r=r_operand.data
+                        l=l_operand.query_parts, r=r_operand.query_parts
                     )
                 )
             set_result = numpy.union1d(l_units, r_units)
@@ -48,7 +48,7 @@ class Node:
             if debug:
                 print(
                     "Performing diff on {l} and {r}".format(
-                        l=l_operand.data, r=r_operand.data
+                        l=l_operand.query_parts, r=r_operand.query_parts
                     )
                 )
             set_result = numpy.setdiff1d(l_units, r_units)
@@ -56,7 +56,7 @@ class Node:
             if debug:
                 print(
                     "Performing intersection on {l} and {r}".format(
-                        l=l_operand.data, r=r_operand.data
+                        l=l_operand.query_parts, r=r_operand.query_parts
                     )
                 )
             set_result = numpy.intersect1d(l_units, r_units)
@@ -64,20 +64,20 @@ class Node:
             if debug:
                 print(
                     "Performing symmetric diff on {l} and {r}".format(
-                        l=l_operand.data, r=r_operand.data
+                        l=l_operand.query_parts, r=r_operand.query_parts
                     )
                 )
             set_result = numpy.setxor1d(l_units, r_units)
 
-        self.data = list(
-            (l_operand.data, operator, r_operand.data)
+        self.query_parts = list(
+            (l_operand.query_parts, operator, r_operand.query_parts)
         )  # combined for debug readouts
         return set_result
 
     def print_tree(self):
         if self.left:
             self.left.print_tree()
-        print(self.data)
+        print(self.query_parts)
         if self.right:
             self.right.print_tree()
 
@@ -87,32 +87,33 @@ class Node:
 
 class ExpressionTree:
     def __init__(self):
-        self.root = Node() # contains set of units for whole query after resolved
+        self.root = QueryNode() # contains set of units for whole query after resolved
         self.size = 1
         self.this = self.root
 
     def insert(self, data):
         try:
             if data == "(":
-                self.this.left = Node()
+                self.this.left = QueryNode()
                 self.this.left.parent = self.this
                 if self.size == 1:
                     self.root = self.this
                 self.this = self.this.left
                 self.size += 1
             if data in actions:
-                self.this.data = data
-                self.this.right = Node()
+                self.this.query_parts = data
+                self.this.right = QueryNode()
                 self.this.right.parent = self.this
                 self.this = self.this.right
                 self.size += 1
-            if data not in actions and data not in ["(", ")"]: # so player
-                self.this.data = data
+            if data not in actions + ["(", ")"]: # so player
+                self.this.query_parts = data
                 self.this = self.this.parent
             if data == ")":
                 self.this = self.this.parent
         except Exception as error:
-            print(error)  # prolly NoneType
+            print(error) # prolly NoneType
+            raise
 
     def resolve_units(
         self, season, aggregator, debug=False
@@ -132,9 +133,7 @@ class QueryResolver:
         self.parse_tree = ExpressionTree()
 
     def __getitem__(self, key):
-        if key == "groups":
-            return self.groups
-        elif key == "parse_tree":
+        if key == "parse_tree":
             return self.parse_tree
         else:
             raise Exception("No key {k}".format(k=key))
@@ -285,7 +284,7 @@ if __name__ == "__main__":
     test18 = "( stephen-curry )"
 
     qr = QueryResolver()
-    debug = False
+    debug = True
     
     print("Test 1")
     qr.resolve_query(test1, season, ag, debug)

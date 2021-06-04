@@ -1,4 +1,3 @@
-
 def special_generator():
     from src.loader_pipeline import open_db
     from src.data.play import Play
@@ -12,12 +11,15 @@ def special_generator():
         season_info = db["raw_data/2001_playoffs/season_info"]
         for game_data in games:
             game = Game(game_data)
-            for possession_data in possessions[game.possession_start_idx:game.possession_end_idx]:
+            for possession_data in possessions[
+                game.possession_start_idx : game.possession_end_idx
+            ]:
                 possession = Possession(possession_data)
-                for play_data in plays[possession.play_start_idx:possession.play_end_idx]:
+                for play_data in plays[
+                    possession.play_start_idx : possession.play_end_idx
+                ]:
                     play = Play(play_data)
                     yield game, possession, play
-
 
 
 if __name__ == "__main__":

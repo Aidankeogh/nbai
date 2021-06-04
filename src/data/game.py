@@ -9,7 +9,7 @@ game_config = DataConfig("src/data/game.yaml")
 class Game(ThoughtPath):
     def __init__(self, data=None):
         super().__init__(game_config, data=data)
-    
+
     def __getattr__(self, key):
         if key == "plays":
             return slice(self.plays_start_idx, self.plays_end_idx)

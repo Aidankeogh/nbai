@@ -77,7 +77,6 @@ class Aggregator:
             raise Exception("No {p} in aggregation".format(p = player))
 
 
-
 if __name__ == "__main__":
     import h5py
 

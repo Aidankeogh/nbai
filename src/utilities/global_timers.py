@@ -43,6 +43,13 @@ class timer_factory:
             print_dict[k] = f"{v.total_time} in {v.calls} calls"
         return yaml.dump(print_dict, default_flow_style=False)
 
+    def avg(self) -> str:
+        print_dict = {}
+        for k, v in self.timers.items():
+            v.sync()
+            print_dict[k] = f"{v.total_time / v.calls} per call for {v.calls} calls"
+        return yaml.dump(print_dict, default_flow_style=False)
+
     def delta(self) -> str:
         print_dict = {}
         for k, v in self.timers.items():

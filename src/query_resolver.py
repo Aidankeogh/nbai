@@ -1,21 +1,17 @@
-import numpy
 from src.utilities.global_timers import timeit, timers
+import numpy
 
 actions = ["|", "_", "^", "&"]  # union  # diff  # symetric diff  # intersection
-
 bad_chars = ["=", "==", "?", "+", "!", "<", ">", "#", "@", "%", "*", "$"]
-
-min_query_size = 10
-max_query_size = 100
-
+min_num_valid_query_parts = 3 # just a player query
 
 class Node:
-    def __init__(self, data):
-        self.data = data
+    def __init__(self, data= None):
+        self.data = data # part of query string
         self.left = None
         self.right = None
         self.parent = None
-        self.units = set()
+        self.units = set() # set of indices/stat calculations
 
     def resolve_units(self, season, aggregator, debug=False):
         try:
@@ -23,7 +19,7 @@ class Node:
                 self.left.resolve_units(season, aggregator, debug)
             if self.right:
                 self.right.resolve_units(season, aggregator, debug)
-            if self.data not in actions:
+            if self.data not in actions: # so a player
                 self.units = self.grab_possessions(self.data, season, aggregator, debug)
             else:
                 self.units = self.perform_set_operation(
@@ -38,7 +34,6 @@ class Node:
         l_units = numpy.array(l_operand.units)
         r_units = numpy.array(r_operand.units)
 
-        # Note this needs to be numpy set funcs() once you get this working, not python funcs
         if operator not in actions:
             raise Exception("Invalid operator", operator)
         if operator == "|":
@@ -92,14 +87,14 @@ class Node:
 
 class ExpressionTree:
     def __init__(self):
-        self.root = Node("blank")
+        self.root = Node() # contains set of units for whole query after resolved
         self.size = 1
         self.this = self.root
 
     def insert(self, data):
         try:
             if data == "(":
-                self.this.left = Node("blank")
+                self.this.left = Node()
                 self.this.left.parent = self.this
                 if self.size == 1:
                     self.root = self.this
@@ -107,11 +102,11 @@ class ExpressionTree:
                 self.size += 1
             if data in actions:
                 self.this.data = data
-                self.this.right = Node("blank")
+                self.this.right = Node()
                 self.this.right.parent = self.this
                 self.this = self.this.right
                 self.size += 1
-            if data not in actions and data not in ["(", ")"]:
+            if data not in actions and data not in ["(", ")"]: # so player
                 self.this.data = data
                 self.this = self.this.parent
             if data == ")":
@@ -133,7 +128,7 @@ class ExpressionTree:
 
 
 class QueryResolver:
-    def __init__(self) -> None:
+    def __init__(self):
         self.groups = []
         self.parse_tree = ExpressionTree()
 
@@ -148,7 +143,7 @@ class QueryResolver:
     @timeit
     def resolve_query(
         self, query, season, aggregator, debug=False
-    ):  # use append and pop
+    ):  
         if debug:
             print(query)
 
@@ -157,35 +152,19 @@ class QueryResolver:
 
         query = self.sanitize_query(query, debug)
 
-        # some Gary bullshit
-        open_paren_stack = []
-        close_peren_queue = []
-        try:
-            for idx in range(0, len(query)):
-                char = query[idx]
-                if char != "(" and char != ")":
-                    continue
-                elif char == "(":
-                    open_paren_stack.append((idx))
-                else:
-                    close_peren_queue.append(idx)
-                    if len(open_paren_stack) > 0:
-                        start, end = (open_paren_stack.pop(), close_peren_queue.pop(0))
-                        if start == 0:
-                            group = query[start : end + 1]
-                            if group != "":
-                                self.groups.append(group)
-        except Exception as error:
-            print(error)
-
-        self.build_expression_tree(self.groups[0].split(" "), debug)
+        self.build_expression_tree(query.split(" "),debug)
         self.resolve_units(season, aggregator, debug)
 
     def build_expression_tree(self, group_parts, debug=False):
         tree = ExpressionTree()
+        base_case = len(group_parts) == min_num_valid_query_parts
 
-        for part in group_parts:
-            tree.insert(part)
+        if base_case:
+            single_player_query = group_parts[1]
+            tree.insert(single_player_query)
+        else:
+            for part in group_parts:
+                tree.insert(part)
         self.parse_tree = tree
 
         if debug:
@@ -203,9 +182,6 @@ class QueryResolver:
         char_idx = 0
         query = query.strip()
         query_len = len(query)
-
-        if query_len < min_query_size or query_len > max_query_size:
-            raise Exception("query {q} is too small or too large".format(q=query))
 
         # handle bad spacing within query. Jank city. Find something simpler
         try:
@@ -287,11 +263,7 @@ if __name__ == "__main__":
         season = "2018_playoffs"
         ag.aggregate(season, db)
 
-    # sanity check
-    games, pos, plays = ag["andre-iguodala", season]
-    # print(len(pos))
-    debug = False
-
+    
     # required to have parens explicit, rather than relying on left to right operation, see test 7
     test1 = "( lebron-james | ( stephen-curry | ( draymond-green | andre-iguodala ) ) )"
     test2 = "( lebron-james | ( stephen-curry ^ ( draymond-green | andre-iguodala ) ) )"
@@ -313,9 +285,12 @@ if __name__ == "__main__":
         "(((lebron-james&kevin-love )| (kevin-durant &stephen-curry) )| draymond-green)"
     )
     test17 = "lebron-james | stephen-curry"
+    # base case test
+    test18 = "( stephen-curry )"
 
     qr = QueryResolver()
-
+    debug = False
+    
     print("Test 1")
     qr.resolve_query(test1, season, ag, debug)
     print()
@@ -417,8 +392,15 @@ if __name__ == "__main__":
     print()
     print()
     print()
+    
+    print("Test 18")
+    qr.resolve_query(test18, season, ag, debug)
+    print()
+    print()
+    print()
 
     # only care about the resolve_query time
-    # should be sub .008 per call
+    # should be sub .0008 per call
+    # turn debug off for timing tests
     print(timers.total())
     print(timers.avg())

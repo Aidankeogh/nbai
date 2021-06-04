@@ -9,7 +9,6 @@ import os
 
 class IndexFinder:
     def __init__(self) -> None:
-
         self.aggregation = defaultdict(dict)
         self.games_indices = defaultdict(set)
         self.possessions_indices = defaultdict(set)

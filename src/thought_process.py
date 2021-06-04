@@ -7,6 +7,8 @@ import torch.nn as nn
 
 softmax = nn.Softmax(dim=1)
 cross_entropy = nn.CrossEntropyLoss(reduction="none")
+
+
 class ThoughtProcess(LightningModule):
     def __init__(self, cfg_path: str, data_cfg_path: str) -> None:
         super().__init__()
@@ -36,7 +38,9 @@ class ThoughtProcess(LightningModule):
 
             if layer["type"] == "transformer":
                 if len(layer["in"]) != len(layer["out"]):
-                    raise("Error, number of input embeddings doesn't match output embeddings")
+                    raise (
+                        "Error, number of input embeddings doesn't match output embeddings"
+                    )
                 d_model = in_dim
                 heads = layer["heads"]
                 n_layers = layer["layers"]
@@ -75,7 +79,7 @@ class ThoughtProcess(LightningModule):
             if key in self.embeddings:
                 temp = self.embeddings[key](temp)
             data[key] = temp
-        
+
         for name, layer in self.layers.items():
             # Load/Concatenate data
             x = []
@@ -90,9 +94,9 @@ class ThoughtProcess(LightningModule):
                 x = layer["module"](x)
                 embeddings_used = 0
                 for key, curr_size in zip(layer["out"], n_embeddings):
-                    data[key] = x[embeddings_used: embeddings_used + curr_size]
+                    data[key] = x[embeddings_used : embeddings_used + curr_size]
                     embeddings_used += curr_size
-            
+
             if layer["type"] == "feedforward":
                 outputs = []
                 for component in x[:]:
@@ -103,7 +107,7 @@ class ThoughtProcess(LightningModule):
                     x = torch.cat(outputs, dim=1)
                 if layer["end"] == "softmax":
                     x = softmax(x)
-                
+
                 data[layer["out"]] = x
         return data
 
@@ -117,7 +121,7 @@ class ThoughtProcess(LightningModule):
                 labels = batch[:, self.data_indices[loss["label"]]]
                 if "options" in loss:
                     options = batch[:, self.data_indices[loss["options"]]]
-                    labels = torch.eq(options, labels.view(-1,1)).long()
+                    labels = torch.eq(options, labels.view(-1, 1)).long()
                 _, labels = labels.max(dim=1)
 
                 raw_losses = cross_entropy(outputs, labels)
@@ -127,10 +131,9 @@ class ThoughtProcess(LightningModule):
                         raw_losses *= mask
                 self.loss_dict[loss["name"]] = torch.mean(raw_losses)
         return sum(self.loss_dict.values())
-    
+
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=0.02)
-
 
 
 if __name__ == "__main__":
@@ -138,7 +141,7 @@ if __name__ == "__main__":
 
     with open_db() as db:
         batch = torch.tensor(db["raw_data/2001_playoffs/plays"][:4])
-    
+
     tp = ThoughtProcess("src/ml/play.yaml", "src/data/play.yaml")
     outputs = tp(batch)
     for k, v in outputs.items():

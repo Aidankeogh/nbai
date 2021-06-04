@@ -129,7 +129,6 @@ class ExpressionTree:
 
 class QueryResolver:
     def __init__(self):
-        self.groups = []
         self.parse_tree = ExpressionTree()
 
     def __getitem__(self, key):
@@ -147,28 +146,25 @@ class QueryResolver:
         if debug:
             print(query)
 
-        if self.groups:
-            self.groups.clear()
-
         query = self.sanitize_query(query, debug)
 
         self.build_expression_tree(query.split(" "),debug)
         self.resolve_units(season, aggregator, debug)
 
-    def build_expression_tree(self, group_parts, debug=False):
+    def build_expression_tree(self, query_parts, debug=False):
         tree = ExpressionTree()
-        base_case = len(group_parts) == min_num_valid_query_parts
+        base_case = len(query_parts) == min_num_valid_query_parts
 
         if base_case:
-            single_player_query = group_parts[1]
+            single_player_query = query_parts[1]
             tree.insert(single_player_query)
         else:
-            for part in group_parts:
+            for part in query_parts:
                 tree.insert(part)
         self.parse_tree = tree
 
         if debug:
-            print(group_parts)
+            print(query_parts)
             self.parse_tree.print_size()
             self.parse_tree.print_tree()
 

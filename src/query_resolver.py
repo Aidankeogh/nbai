@@ -12,6 +12,14 @@ class QueryNode:
         self.right = None
         self.parent = None
         self.units = set() # set of indices/stat calculations
+    
+    def __getitem__(self,key):
+        if key == "query_parts":
+            return self.query_parts
+        elif key == "units":
+            return self.units
+        else:
+            raise Exception("No key {k}".format(k=key))
 
     def resolve_units(self, season, aggregator, debug=False):
         try:
@@ -89,30 +97,30 @@ class ExpressionTree:
     def __init__(self):
         self.root = QueryNode() # contains set of units for whole query after resolved
         self.size = 1
-        self.this = self.root
+        self.curr = self.root
 
     def insert(self, data):
         try:
             if data == "(":
-                self.this.left = QueryNode()
-                self.this.left.parent = self.this
+                self.curr.left = QueryNode()
+                self.curr.left.parent = self.curr
                 if self.size == 1:
-                    self.root = self.this
-                self.this = self.this.left
+                    self.root = self.curr
+                self.curr = self.curr.left
                 self.size += 1
             if data in actions:
-                self.this.query_parts = data
-                self.this.right = QueryNode()
-                self.this.right.parent = self.this
-                self.this = self.this.right
+                self.curr.query_parts = data
+                self.curr.right = QueryNode()
+                self.curr.right.parent = self.curr
+                self.curr = self.curr.right
                 self.size += 1
             if data not in actions + ["(", ")"]: # so player
-                self.this.query_parts = data
-                self.this = self.this.parent
+                self.curr.query_parts = data
+                self.curr = self.curr.parent
             if data == ")":
-                self.this = self.this.parent
-        except Exception as error:
-            print(error) # prolly NoneType
+                self.curr = self.curr.parent
+        except AttributeError as error:
+            print("error when building ExpressionTree",error)
             raise
 
     def resolve_units(
@@ -172,9 +180,8 @@ class QueryResolver:
 
     def sanitize_query(self, query, debug=False):
         bad_chars = []
-        open_perens = 0
-        closed_perens = 0
         char_idx = 0
+        open_perens,closed_perens = 0,0
         query = query.strip()
         query_len = len(query)
 
@@ -288,108 +295,126 @@ if __name__ == "__main__":
     
     print("Test 1")
     qr.resolve_query(test1, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 2")
     qr.resolve_query(test2, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 3")
     qr.resolve_query(test3, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 4")
     qr.resolve_query(test4, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 5")
     qr.resolve_query(test5, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 6 ")
     qr.resolve_query(test6, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 7")
     qr.resolve_query(test7, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 8")
     qr.resolve_query(test8, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 9")
     qr.resolve_query(test9, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 10")
     qr.resolve_query(test10, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 11")
     qr.resolve_query(test11, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 12")
     qr.resolve_query(test12, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 13")
     qr.resolve_query(test13, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 14")
     qr.resolve_query(test14, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 15")
     qr.resolve_query(test15, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 16")
     qr.resolve_query(test16, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
 
     print("Test 17")
     qr.resolve_query(test17, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
     
     print("Test 18")
     qr.resolve_query(test18, season, ag, debug)
+    print(qr["parse_tree"].root["query_parts"])
     print()
     print()
     print()
@@ -399,3 +424,8 @@ if __name__ == "__main__":
     # turn debug off for timing tests
     print(timers.total())
     print(timers.avg())
+   
+
+
+
+    

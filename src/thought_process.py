@@ -2,6 +2,7 @@ import oyaml
 import torch
 from typing import OrderedDict
 from pytorch_lightning import LightningModule
+from torchmetrics import Accuracy
 from src.thought_path import DataConfig
 import torch.nn as nn
 
@@ -30,6 +31,8 @@ class ThoughtProcess(LightningModule):
                 self.dimensions[key] = self.dimensions[input["choices"]]
 
         self.losses = cfg["losses"]
+        for loss in self.losses:
+           loss["metric"] = Accuracy(top_k=1)
 
         self.layers = OrderedDict()
         for layer in cfg["compute"]:
@@ -111,9 +114,9 @@ class ThoughtProcess(LightningModule):
                 data[layer["out"]] = x
         return data
 
-    def training_step(self, batch, batch_idx):
+    def get_losses(self, batch):        
         all_outputs = self(batch)
-        self.loss_dict = {}
+        loss_dict = {}
         for loss in self.losses:
             if loss["type"] == "classification":
                 mask = None
@@ -123,14 +126,33 @@ class ThoughtProcess(LightningModule):
                     options = batch[:, self.data_indices[loss["options"]]]
                     labels = torch.eq(options, labels.view(-1, 1)).long()
                 _, labels = labels.max(dim=1)
-
+                loss["outputs"] = outputs
+                loss["labels"] = labels
                 raw_losses = cross_entropy(outputs, labels)
                 if "conditions" in loss:
                     for condition in loss["conditions"]:
                         mask = batch[:, self.data_indices[condition]]
                         raw_losses *= mask
-                self.loss_dict[loss["name"]] = torch.mean(raw_losses)
+                loss_dict[loss["name"]] = torch.mean(raw_losses)
+        return loss_dict
+
+    def training_step(self, batch, batch_idx) -> torch.Tensor:
+        self.loss_dict = self.get_losses(batch)
         return sum(self.loss_dict.values())
+
+    def validation_step(self, batch, batch_idx) -> torch.Tensor:
+        self.loss_dict = self.get_losses(batch)
+        return sum(self.loss_dict.values())
+
+    def validation_step_end(self, outputs) -> torch.Tensor:
+        #update and log
+        for loss in self.losses:
+            loss["metric"](loss["outputs"], loss["labels"])
+        return outputs
+
+    def validation_epoch_end(self, outs) -> None:
+        for loss in self.losses:
+            self.log(loss["name"], loss["metric"].compute())
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=0.02)

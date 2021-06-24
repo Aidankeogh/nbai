@@ -1,0 +1,61 @@
+in:
+  offense_team:
+    type: embedding
+    dim: 32
+    num: 40
+  offense_roster:
+    type: embedding_list
+    len: 5
+    dim: 32
+    num: 4000
+  initial_event:
+    type: choice
+    len: 5
+  shooter: 
+    type: embedding_choice
+    choices: offense_roster
+
+compute:
+  - name: offense_transformer
+    type: transformer
+    layers: 2
+    heads: 4
+    dim_feedforward: 8
+    in: 
+      - offense_team
+      - offense_roster
+    out:
+      - offense_team_e
+      - offense_roster_e
+  - name: initial_event_classifier
+    type: feedforward
+    end: softmax
+    hidden: 32
+    out_dim: 5
+    in: 
+      - offense_team_e
+    out: initial_event_p
+  - name: shooter_classifier
+    type: feedforward
+    end: softmax
+    hidden: 32
+    out_dim: 1
+    in: 
+      - offense_roster_e
+    out: shooter_p
+
+losses:
+  - name: initial_event_loss
+    type: classification
+    out: initial_event_p
+    label: initial_event
+
+  - name: shooter_loss
+    type: classification
+    out: shooter_p
+    label: shooter
+    options: offense_roster
+    conditions:
+      - initial_event_shot
+
+

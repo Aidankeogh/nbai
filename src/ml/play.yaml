@@ -14,6 +14,10 @@ in:
   shooter: 
     type: embedding_choice
     choices: offense_roster
+  shot_made:
+    type: bool
+  is_3: 
+    type: bool
 
 compute:
   - name: offense_transformer
@@ -35,6 +39,7 @@ compute:
     in: 
       - offense_team_e
     out: initial_event_p
+
   - name: shooter_classifier
     type: feedforward
     end: softmax
@@ -43,6 +48,24 @@ compute:
     in: 
       - offense_roster_e
     out: shooter_p
+
+  - name: shot_made_classifier
+    type: feedforward
+    end: sigmoid
+    hidden: 32
+    out_dim: 1
+    in: 
+      - offense_roster_e
+    out: shot_made_p
+
+  - name: is_3_classifier
+    type: feedforward
+    end: sigmoid
+    hidden: 32
+    out_dim: 1
+    in: 
+      - offense_roster_e
+    out: is_3_p
 
 losses:
   - name: initial_event_loss
@@ -58,4 +81,17 @@ losses:
     conditions:
       - initial_event_shot
 
+  - name: shot_made_loss
+    type: binary_classification
+    out: shooter_p
+    label: shot_made_p
+    conditions:
+      - initial_event_shot
+
+  - name: is_3_loss
+    type: binary_classification
+    out: is_3_p
+    label: is_3
+    conditions:
+      - initial_event_shot
 

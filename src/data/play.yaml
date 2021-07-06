@@ -43,6 +43,8 @@ shot_distance:
 shot_type:
   type: choice
   choices: [Arc3, Corner3, LongMidRange, AtRim, ShortMidRange]
+  triggers:
+    - initial_event: shot 
 
 shot_fouled:
   type: bool

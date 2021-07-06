@@ -42,6 +42,7 @@ def load_raw_data(
         season_iter.extend([(y, season_type) for y in years])
 
     for in_season in season_iter:
+        print(in_season, timers.total())
 
         out_data = {
             "season_info": None,

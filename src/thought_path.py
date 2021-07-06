@@ -19,6 +19,7 @@ class DataConfig:
         self.data_indices = {}
         self.choice_keys = {}
         self.choice_indices = {}
+        self.embedding_choices = {}
         for k, v in path.items():
             if v["type"] == "embedding_list":
                 self.is_embedding[k] = True
@@ -62,6 +63,8 @@ class DataConfig:
                 self.data_indices[k] = len(self.data_keys)
                 self.data_keys.append(k)
                 self.is_embedding[k] = v["type"] == "embedding"
+                if "choices" in v and self.is_embedding[k]:
+                    self.embedding_choices[k] = v["choices"]
                 self.is_int[k] = v["type"] == "int"
 
             if "triggers" in v:

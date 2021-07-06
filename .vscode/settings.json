@@ -4,4 +4,5 @@
     "terminal.integrated.shellArgs.osx": ["environment.sh"],
     "terminal.integrated.shellArgs.windows": ["environment.sh"],
     "python.terminal.executeInFileDir": false,
+    "python.pythonPath": "/home/aidan/miniconda3/bin/python3.8",
 }

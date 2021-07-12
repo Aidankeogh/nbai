@@ -126,18 +126,15 @@ def parse_box_stats(play):
     if play.turnoverer is not None:
         o_stats[play.turnoverer, "tov"] = 1
 
-    if (
-        play.over_limit_fouler is not None
-    ):
+    if play.over_limit_fouler is not None:
         d_stats[play.over_limit_fouler, "pfs"] = 1
-    if (
-        play.shooting_fouler is not None
-    ):
+    if play.shooting_fouler is not None:
         d_stats[play.shooting_fouler, "pfs"] = 1
     if play.common_fouler is not None:
         d_stats[play.common_fouler, "pfs"] = 1
 
     return o_stats, d_stats
+
 
 def parse_multiple_plays(plays):
     stats = defaultdict(Box_stats)
@@ -147,16 +144,20 @@ def parse_multiple_plays(plays):
         off_stats, def_stats = parse_box_stats(play)
         stats[play.offense_team] += off_stats
         stats[play.defense_team] += def_stats
-    
+
     return stats
+
 
 if __name__ == "__main__":
     import h5py
     from src.data.game import Game
+
     db_name = "cache/ml_db_0.0.1.h5"
-    with h5py.File(db_name, "r", libver='latest', swmr=True) as db:
+    with h5py.File(db_name, "r", libver="latest", swmr=True) as db:
         test_game = Game(db["raw_data/2016_playoffs/games"][-4])
-        test_plays = db["raw_data/2016_playoffs/plays"][test_game.play_start_idx:test_game.play_end_idx]
+        test_plays = db["raw_data/2016_playoffs/plays"][
+            test_game.play_start_idx : test_game.play_end_idx
+        ]
     stats = parse_multiple_plays(test_plays)
     for k, v in stats.items():
         print(k)

@@ -8,6 +8,7 @@ import atexit
 import torch
 import random
 
+
 def get_seasons(years=range(2001, 2020), season_types=["regular", "playoffs"]):
     seasons = []
     for season_type in season_types:
@@ -18,8 +19,10 @@ def get_seasons(years=range(2001, 2020), season_types=["regular", "playoffs"]):
 
 all_seasons = get_seasons()
 
+
 def custom_collate(batch):
     return batch[0]
+
 
 play_indices = play_config.data_indices
 play_indices.update(play_config.slice_keys)
@@ -31,8 +34,9 @@ to_extract = [
     "initial_event",
     "shooter",
     "shot_made",
-    "shot_type"
+    "shot_type",
 ]
+
 
 def format_data(batch):
     data = {}
@@ -53,27 +57,34 @@ def format_data(batch):
 
         if key in play_config.triggers:
             triggers = play_config.triggers[key]
-            validity[key] = torch.zeros(data[key].shape[0]) 
+            validity[key] = torch.zeros(data[key].shape[0])
             for trigger in triggers:
                 trigger_valid = torch.ones(data[key].shape[0])
                 for trigger_key, trigger_value in trigger.items():
                     if play_config.is_choice[trigger_key]:
-                        trigger_idx = play_config.choice_indices[trigger_key][trigger_value]
+                        trigger_idx = play_config.choice_indices[trigger_key][
+                            trigger_value
+                        ]
                         condition_satisfied = data[trigger_key] == trigger_idx
                     else:
                         condition_satisfied = data[trigger_key] == trigger_value
-                    trigger_valid = torch.logical_and(trigger_valid, condition_satisfied)
+                    trigger_valid = torch.logical_and(
+                        trigger_valid, condition_satisfied
+                    )
                 validity[key] = torch.logical_or(validity[key], trigger_valid)
 
     return data, validity
 
+
 class PlayDataset(Dataset):
-    def __init__(self, seasons=all_seasons, db_name="cache/ml_db_0.0.1.h5", dp=False) -> None:
+    def __init__(
+        self, seasons=all_seasons, db_name="cache/ml_db_0.0.1.h5", dp=False
+    ) -> None:
         self.db_name = db_name
         self.seasons = seasons
-        with h5py.File(db_name, "r", libver='latest', swmr=True) as db:
+        with h5py.File(db_name, "r", libver="latest", swmr=True) as db:
             self.length = 0
-            self.season_lengths = OrderedDict() 
+            self.season_lengths = OrderedDict()
             for season in seasons:
                 self.season_lengths[season] = len(db[f"raw_data/{season}/plays"])
                 self.length += self.season_lengths[season]
@@ -101,6 +112,7 @@ class PlayDataset(Dataset):
     def cleanup(self):
         self.db.close()
 
+
 class BatchedPlayDataset(PlayDataset):
     def __init__(self, batch_size=32, **kwargs):
         super().__init__(**kwargs)
@@ -111,18 +123,18 @@ class BatchedPlayDataset(PlayDataset):
 
         self.batches_per_season = []
         for season in self.seasons:
-            length  = self.season_lengths[season]
-            self.batches_per_season.append(- ( - length // self.batch_size))
+            length = self.season_lengths[season]
+            self.batches_per_season.append(-(-length // self.batch_size))
         self.n_batches = sum(self.batches_per_season)
 
         self.current_season = -1
         self.available_batches = 0
-    
+
     def __len__(self):
         return self.n_batches
-    
+
     def __getitem__(self, idx):
-        while(idx >= self.available_batches):
+        while idx >= self.available_batches:
             self.current_season += 1
             self.cache_start_position = self.available_batches
             self.available_batches += self.batches_per_season[self.current_season]
@@ -139,10 +151,11 @@ class BatchedPlayDataset(PlayDataset):
         raw_data = self.cache[indices]
         return format_data(raw_data)
 
+
 if __name__ == "__main__":
     b = BatchedPlayDataset(3200)
     bl = DataLoader(b, collate_fn=custom_collate, batch_size=1, shuffle=False)
-    timers["loading"].start() 
+    timers["loading"].start()
     for batch in bl:
         data, valid = batch
     timers["loading"].stop()
@@ -157,7 +170,11 @@ def worker_init_fn(worker_id):
 
 class PlayModule(LightningDataModule):
     def __init__(
-        self, db_name: str = "cache/ml_db_0.0.1.h5", batch_size: int = 32, val_seasons: int = 4, num_workers: int = 0
+        self,
+        db_name: str = "cache/ml_db_0.0.1.h5",
+        batch_size: int = 32,
+        val_seasons: int = 4,
+        num_workers: int = 0,
     ):
         super().__init__()
         self.db_name = db_name
@@ -167,21 +184,43 @@ class PlayModule(LightningDataModule):
         self.train_seasons = [i for i in get_seasons() if i not in self.val_seasons]
 
     def setup(self, stage=None):
-        self.train_set = BatchedPlayDataset(batch_size=self.batch_size, seasons=self.train_seasons, db_name=self.db_name, dp=self.num_workers > 0)
-        self.val_set = BatchedPlayDataset(batch_size=self.batch_size, seasons=self.val_seasons, db_name=self.db_name, dp=self.num_workers > 0)
+        self.train_set = BatchedPlayDataset(
+            batch_size=self.batch_size,
+            seasons=self.train_seasons,
+            db_name=self.db_name,
+            dp=self.num_workers > 0,
+        )
+        self.val_set = BatchedPlayDataset(
+            batch_size=self.batch_size,
+            seasons=self.val_seasons,
+            db_name=self.db_name,
+            dp=self.num_workers > 0,
+        )
         self.test_set = self.val_set
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_set, batch_size=1, collate_fn=custom_collate, num_workers=self.num_workers, worker_init_fn=worker_init_fn
+            self.train_set,
+            batch_size=1,
+            collate_fn=custom_collate,
+            num_workers=self.num_workers,
+            worker_init_fn=worker_init_fn,
         )
 
     def val_dataloader(self):
         return DataLoader(
-            self.val_set, batch_size=1, collate_fn=custom_collate, num_workers=self.num_workers, worker_init_fn=worker_init_fn
+            self.val_set,
+            batch_size=1,
+            collate_fn=custom_collate,
+            num_workers=self.num_workers,
+            worker_init_fn=worker_init_fn,
         )
 
     def test_dataloader(self):
         return DataLoader(
-            self.test_set, batch_size=1, collate_fn=custom_collate, num_workers=self.num_workers, worker_init_fn=worker_init_fn
+            self.test_set,
+            batch_size=1,
+            collate_fn=custom_collate,
+            num_workers=self.num_workers,
+            worker_init_fn=worker_init_fn,
         )

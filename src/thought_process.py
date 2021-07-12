@@ -12,7 +12,7 @@ cross_entropy = nn.CrossEntropyLoss(reduction="none")
 
 
 class ThoughtProcess(LightningModule):
-    def __init__(self, cfg_path: str, data_cfg_path: str) -> None:PlayModel
+    def __init__(self, cfg_path: str, data_cfg_path: str) -> None:
         super().__init__()
         cfg = oyaml.load(open(cfg_path, "r"), Loader=oyaml.Loader)
         data_cfg = DataConfig(data_cfg_path)

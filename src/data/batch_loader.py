@@ -100,14 +100,14 @@ def accumulate_box_stats(db):
 
         for play in plays:
             try:
-                off_stats, def_stats = parse_box_stats(play, rosters)
+                off_stats, def_stats = parse_box_stats(play)
                 stats[play.offense_team] += off_stats
                 stats[play.defense_team] += def_stats
             except Exception as e:
                 print(e)
         all_stats[season] = stats
 
-        #for k, v in stats.items():
+        # for k, v in stats.items():
         #    print(season, k)
         #    db[f"box_stats/{season}/{k}"] = v.data
         #    os.makedirs(f"metadata/rosters", exist_ok=True)
@@ -127,9 +127,9 @@ if __name__ == "__main__":
     with h5py.File(db_path, "a") as db:
         load_raw_data(db, years=[2018], season_types=["Playoffs"])
         box_stats = accumulate_box_stats(db)
-        #with open("metadata/rosters/2018_playoffs", "rb") as f:
+        # with open("metadata/rosters/2018_playoffs", "rb") as f:
         #    rosters = msgpack.load(f)
-        #box_stats = Box_stats(db["box_stats/2018_playoffs/GSW"][:])
+        # box_stats = Box_stats(db["box_stats/2018_playoffs/GSW"][:])
 
     print(box_stats)
     steph_stats = box_stats["2018_playoffs"]["GSW"]["stephen-curry", :]

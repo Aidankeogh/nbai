@@ -1,9 +1,12 @@
 
 
-from src.ml.play_dataset import PlayModule
+from src.ml.play_dataset import PlayModule, format_data
 from src.data.play import Play
+from src.data.box_stats import parse_multiple_plays
 from pytorch_lightning import LightningModule
+from pytorch_lightning import Trainer
 from src.thought_path import DataConfig
+from torchmetrics import Accuracy
 from pprint import pprint
 import torch.nn as nn
 import torch
@@ -40,19 +43,33 @@ def apply_per_player(head, players, softmax_over_players=False):
 
     if softmax_over_players:
         # softmax over the player dim
-        output = torch.softmax(output, dim=0)
+        output = torch.softmax(output, dim=1)
 
     return output
+
+def apply_mask(outputs, targets, validity):
+    mask = validity.nonzero().squeeze()
+    return outputs[mask], targets[mask]
 
 class PlayModel(LightningModule):
     def __init__(
             self,
+            epochs=4,
+            min_lr=0.1,
+            max_lr=1.0,
             **kwargs
         ):
         super().__init__()
+        
+        self.epochs = epochs
+        self.curr_epoch = 0
+        self.min_lr = min_lr
+        self.max_lr = max_lr
+
         self.create_backbone(**kwargs)
         self.create_heads(**kwargs)
         self.create_losses(**kwargs)
+        self.create_metrics(**kwargs)
 
     def create_backbone(
             self, 
@@ -94,7 +111,6 @@ class PlayModel(LightningModule):
         shooter_hidden=256,
         shot_made_hidden=256,
         shot_type_hidden=256,
-
         **kwargs
     ):
         self.initial_event = feedforward(embedding_dim * 2, initial_event_hidden, 5, final=nn.Softmax(dim=1))
@@ -105,25 +121,22 @@ class PlayModel(LightningModule):
 
     def create_losses(
         self,
+        initial_event_wt=1,
+        shooter_wt=1,
+        shot_made_wt=1,
+        shot_type_wt=1,
+        **kwargs
     ):
         self.initial_event_loss = nn.CrossEntropyLoss(reduction="mean")
         self.shooter_loss = nn.CrossEntropyLoss(reduction="none")
         self.shot_made_loss = nn.BCELoss(reduction="none")
         self.shot_type_loss = nn.CrossEntropyLoss(reduction="none")
         self.loss_weights = {
-            "initial_event": 1,
-            "shooter": 0.5,
-            "shot_made": 1,
-            "shot_type": 0.5,
+            "initial_event": initial_event_wt,
+            "shooter": shooter_wt,
+            "shot_made": shot_made_wt,
+            "shot_type": shot_type_wt,
         }
-    
-    def create_metrics(
-        self,
-    ):
-        self.shoot_made_accuracy = Accuracy(top_k=1)
-        self.shooter_accuracy = Accuracy(top_k=1)
-        self.shot_made_accuracy = Accuracy(top_k=1)
-        self.shot_type_accuracy = Accuracy(top_k=1)
     
     def transformer_backbone(self, offense_roster, defense_roster, offense_team, defense_team):
 
@@ -154,17 +167,9 @@ class PlayModel(LightningModule):
         defense_team = self.team_embeddings(defense_team)
 
         # Run through backbone
-        (
-            offense_roster, 
-            defense_roster,
-            offense_team,
-            defense_team
+        (   offense_roster, defense_roster, offense_team, defense_team
         ) = self.transformer_backbone(
-            offense_roster, 
-            defense_roster,
-            offense_team,
-            defense_team
-        )
+            offense_roster, defense_roster, offense_team, defense_team)
 
         # Swap the axes to make the batch dimensions are the traditional batch x player x ...
         # Instead of transformer output player x batch x ...
@@ -180,39 +185,39 @@ class PlayModel(LightningModule):
             "shot_made": apply_per_player(self.shot_made, offense_roster),
             "shot_type": apply_per_player(self.shot_type, offense_roster),
         }
-        od = out_dict["shot_type"]
+
         return out_dict
 
-    def get_losses(self, play, outputs, validity):
-        play, validity = batch
+    def get_losses(self, batch):
+        targets, validity = batch
         outputs = self(batch)
 
         # Save outputs and labels for later
         self.outputs = outputs
-        self.play = play
+        self.targets = targets
         self.validity = validity
         
         loss_dict = {}
-        loss_dict["initial_event"] = self.initial_event_loss(outputs["initial_event"], play["initial_event"])
+        loss_dict["initial_event"] = self.initial_event_loss(outputs["initial_event"], targets["initial_event"])
 
-        loss_dict["shooter"] = self.shooter_loss(outputs["shooter"], play["shooter"])
+        loss_dict["shooter"] = self.shooter_loss(outputs["shooter"], targets["shooter"])
         loss_dict["shooter"] = torch.mean(loss_dict["shooter"] * validity["shooter"])
 
         # Just get the shot type and shot made probabilities for the shooter, ignore all other players
-        shot_made_outputs = outputs["shot_made"][torch.arange(play["shooter"].shape[0]), play["shooter"]]
-        loss_dict["shot_made"] = self.shot_made_loss(shot_made_outputs, play["shot_made"].squeeze().float())
+        arange = torch.arange(targets["shooter"].shape[0])
+        shot_made_outputs = outputs["shot_made"][arange, targets["shooter"]]
+        shot_type_outputs = outputs["shot_type"][arange, targets["shooter"], :]
+
+        loss_dict["shot_made"] = self.shot_made_loss(shot_made_outputs, targets["shot_made"].squeeze().float())
         loss_dict["shot_made"] = torch.mean(loss_dict["shot_made"] * validity["shot_made"])
 
-        shot_type_outputs = outputs["shot_type"][torch.arange(play["shooter"].shape[0]), play["shooter"], :]
-        loss_dict["shot_type"] = self.shot_type_loss(shot_type_outputs, play["shot_type"])
+        loss_dict["shot_type"] = self.shot_type_loss(shot_type_outputs, targets["shot_type"])
         loss_dict["shot_type"] = torch.mean(loss_dict["shot_type"] * validity["shot_type"])
 
         for k in loss_dict.keys():
             loss_dict[k] = loss_dict[k] * self.loss_weights[k]
 
         return loss_dict
-    
-    def get_metrics(self, )
 
     def training_step(self, batch, batch_idx) -> torch.Tensor:
         self.loss_dict = self.get_losses(batch)
@@ -221,21 +226,46 @@ class PlayModel(LightningModule):
     def validation_step(self, batch, batch_idx) -> torch.Tensor:
         self.loss_dict = self.get_losses(batch)
         return sum(self.loss_dict.values())
-    
-    def set_params(self, num_epochs, min_lr, max_lr):
-        self.epochs = num_epochs
-        self.min_lr = min_lr
-        self.max_lr = max_lr
 
-    def training_step_end(self, outputs) -> torch.Tensor:
-        for loss in self.losses:
-            loss["metric"](loss["outputs"], loss["labels"])
+    def create_metrics(
+        self,
+        **kwargs
+    ):
+        self.initial_event_accuracy = Accuracy(top_k=1)
+        self.shooter_accuracy = Accuracy(top_k=1)
+        self.shot_made_accuracy = Accuracy(multiclass=False)
+        self.shot_type_accuracy = Accuracy(top_k=1)
+
+    def validation_step_end(self, outputs) -> torch.Tensor:
+        self.initial_event_accuracy(self.outputs["initial_event"], self.targets["initial_event"])
+        
+        mask = self.validity["shooter"].nonzero().squeeze()
+        valid_shooters = self.targets["shooter"][mask]
+
+        self.shooter_accuracy(self.outputs["shooter"][mask], valid_shooters)
+
+        self.shot_made_accuracy(self.outputs["shot_made"][mask, valid_shooters], self.targets["shot_made"].squeeze()[mask])
+
+        self.shot_type_accuracy(self.outputs["shot_type"][mask, valid_shooters, :], self.targets["shot_type"][mask])
+
         self.log("train_loss", outputs)
         return outputs
 
+    def validation_epoch_end(self, outs) -> None:
+        iea = self.initial_event_accuracy.compute()
+        self.log("initial_event_accuracy", iea)
+        sa = self.shooter_accuracy.compute()
+        self.log("shooter_accuracy", sa)
+        sma = self.shot_made_accuracy.compute()
+        self.log("shot_made_accuracy", sma)
+        sta = self.shot_type_accuracy.compute()
+        self.log("shot_type_accuracy", sta)
+        self.log("summed_accuracy", (iea + sa + sma + sta) / 4) 
+        if self.curr_epoch % 40 == 0:
+            self.print(iea, sa, sma, sta)
+    
     def training_epoch_end(self, outs) -> None:
-            
-        self.log(loss["name"], loss["metric"].compute())
+        self.curr_epoch += 1
         self.scheduler.step()
 
     def configure_optimizers(self):
@@ -244,14 +274,28 @@ class PlayModel(LightningModule):
         optim = torch.optim.Adam(self.parameters(), lr=0.02)
         self.scheduler = torch.optim.lr_scheduler.CyclicLR(optim, self.min_lr, self.max_lr, ep_up, ep_down, cycle_momentum=False)
         return optim
+    
 
 if __name__ == "__main__":
-    datamodule = PlayModule(db_name="cache/ml_db_0.0.1.h5", batch_size=4, num_workers=0)
-    datamodule.setup()
-    batch = iter(datamodule.train_dataloader()).next()
-    #print(batch[0])
-    model = PlayModel()
-    output_dict = model.get_losses(batch)
+    import h5py
+    from src.data.game import Game
+    db_name = "cache/ml_db_0.0.1.h5"
+    datamodule = PlayModule(db_name=db_name, batch_size=32000, num_workers=4)
 
-    for k, v in output_dict.items():
-        print(k, v)
+    with h5py.File(db_name, "r", libver='latest', swmr=True) as db:
+        test_game = Game(db["raw_data/2016_playoffs/games"][-4])
+        test_plays = db["raw_data/2016_playoffs/plays"][test_game.play_start_idx:test_game.play_end_idx]
+
+    model = PlayModel(epochs=5)
+    
+    print(parse_multiple_plays(test_plays))
+    print(model(format_data(test_plays)))
+
+    trainer = Trainer(
+        logger=True,
+        checkpoint_callback=False,
+        max_epochs=model.epochs,
+        gpus=[0],
+    )
+
+    trainer.fit(model, datamodule)

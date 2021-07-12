@@ -163,8 +163,8 @@ class PlayModule(LightningDataModule):
         self.db_name = db_name
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.train_seasons = get_seasons() #all_seasons[:-val_seasons]
         self.val_seasons = get_seasons([2016])
+        self.train_seasons = [i for i in get_seasons() if i not in self.val_seasons]
 
     def setup(self, stage=None):
         self.train_set = BatchedPlayDataset(batch_size=self.batch_size, seasons=self.train_seasons, db_name=self.db_name, dp=self.num_workers > 0)

@@ -1,4 +1,6 @@
 from src.utilities.global_timers import timeit
+from src.data.play import Play
+from collections import defaultdict
 from tabulate import tabulate
 import torch
 
@@ -26,14 +28,9 @@ category_idxes = {category: i for i, category in enumerate(categories)}
 
 
 class Box_stats:
-    def __init__(self, roster, data=None) -> None:
-        if "none" in roster:
-            print(roster)
-            raise Exception("ERROR")
-        self.roster = roster
-        self.player_idxes = {player: i for i, player in enumerate(self.roster)}
+    def __init__(self, data=None) -> None:
         if data is None:
-            self.data = torch.zeros(len(roster), len(categories))
+            self.data = {}
         else:
             self.data = data
 
@@ -44,48 +41,53 @@ class Box_stats:
         player, category = key
         if player == "none":
             return None
-        if type(player) is slice:
-            player_idx = player
-        else:
-            player_idx = self.player_idxes[player]
 
         if type(category) is slice:
             category_idx = category
         else:
             category_idx = category_idxes[category]
-        return self.data[player_idx, category_idx]
+        return self.data[player][category_idx]
 
     def __setitem__(self, key, value):
         player, category = key
         if player is not None:
-            # if player not in self.player_idxes:
-            # print(player, self.player_idxes, value)
-            player_idx = self.player_idxes[player]
+            if player not in self.data:
+                self.data[player] = torch.zeros(len(categories))
             category_idx = category_idxes[category]
-            self.data[player_idx, category_idx] = value
+            self.data[player][category_idx] = value
 
     def __add__(self, other):
-        return Box_stats(self.roster, self.data + other.data)
+
+        new_data = self.data.copy()
+        for k, v in other.data.items():
+            if k in new_data:
+                new_data[k] += v
+            else:
+                new_data[k] = v
+
+        return Box_stats(new_data)
 
     def __iadd__(self, other):
-        self.data += other.data
+        for k, v in other.data.items():
+            if k in self.data:
+                self.data[k] += v
+            else:
+                self.data[k] = v
+
         return self
 
     def __repr__(self):
         table = []
-        for player in sorted(self.roster):
+        for player in sorted(self.data.keys()):
             if player is not None:
                 table.append([player] + list(self[player, :]))
         return tabulate(table, headers=[" "] + categories)
 
 
 @timeit
-def parse_box_stats(play, rosters):
-    offense_roster = rosters[play.offense_team]
-    defense_roster = rosters[play.defense_team]
-
-    o_stats = Box_stats(offense_roster)
-    d_stats = Box_stats(defense_roster)
+def parse_box_stats(play):
+    o_stats = Box_stats()
+    d_stats = Box_stats()
 
     for player in play.offense_roster:
         o_stats[player, "o_pos"] = 1 - play.is_second_chance
@@ -102,7 +104,7 @@ def parse_box_stats(play, rosters):
         o_stats[play.shooter, "3pm"] = play.shot_made and play.is_3
         o_stats[play.shooter, "pts"] += play.shot_made * (2 + play.is_3)
 
-    if play.free_thrower is not None and play.free_thrower in o_stats.player_idxes:
+    if play.free_thrower is not None:
         n_free_throws = play.free_throws_attempted
         free_throws_made = play.free_throws_made
         o_stats[play.free_thrower, "ftm"] = free_throws_made
@@ -124,17 +126,39 @@ def parse_box_stats(play, rosters):
     if play.turnoverer is not None:
         o_stats[play.turnoverer, "tov"] = 1
 
-    if (
-        play.over_limit_fouler is not None
-        and play.over_limit_fouler in d_stats.player_idxes
-    ):
+    if play.over_limit_fouler is not None:
         d_stats[play.over_limit_fouler, "pfs"] = 1
-    if (
-        play.shooting_fouler is not None
-        and play.shooting_fouler in d_stats.player_idxes
-    ):
+    if play.shooting_fouler is not None:
         d_stats[play.shooting_fouler, "pfs"] = 1
-    if play.common_fouler is not None and play.common_fouler in d_stats.player_idxes:
+    if play.common_fouler is not None:
         d_stats[play.common_fouler, "pfs"] = 1
 
     return o_stats, d_stats
+
+
+def parse_multiple_plays(plays):
+    stats = defaultdict(Box_stats)
+    for play in plays:
+        if type(play) is not Play:
+            play = Play(play)
+        off_stats, def_stats = parse_box_stats(play)
+        stats[play.offense_team] += off_stats
+        stats[play.defense_team] += def_stats
+
+    return stats
+
+
+if __name__ == "__main__":
+    import h5py
+    from src.data.game import Game
+
+    db_name = "cache/ml_db_0.0.1.h5"
+    with h5py.File(db_name, "r", libver="latest", swmr=True) as db:
+        test_game = Game(db["raw_data/2016_playoffs/games"][-4])
+        test_plays = db["raw_data/2016_playoffs/plays"][
+            test_game.play_start_idx : test_game.play_end_idx
+        ]
+    stats = parse_multiple_plays(test_plays)
+    for k, v in stats.items():
+        print(k)
+        print(v)

@@ -5,6 +5,7 @@ from pytorch_lightning import LightningModule
 from torchmetrics import Accuracy
 from src.thought_path import DataConfig
 import torch.nn as nn
+from torch import sigmoid
 
 softmax = nn.Softmax(dim=1)
 cross_entropy = nn.CrossEntropyLoss(reduction="none")
@@ -69,6 +70,9 @@ class ThoughtProcess(LightningModule):
             self.__setattr__(key, layer["module"])
         for key, embeds in self.embeddings.items():
             self.__setattr__(f"{key}_embeddings", embeds)
+        for loss in self.losses:
+            name = loss["name"]
+            self.__setattr__(f"{name}_metric", loss["metric"])
 
     def forward(self, play):
         data = {}
@@ -110,6 +114,8 @@ class ThoughtProcess(LightningModule):
                     x = torch.cat(outputs, dim=1)
                 if layer["end"] == "softmax":
                     x = softmax(x)
+                if layer["end"] == "sigmoid":
+                    x = sigmoid(x)
 
                 data[layer["out"]] = x
         return data

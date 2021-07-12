@@ -1,5 +1,6 @@
 from src.thought_path import DataConfig, ThoughtPath
 from src.utilities.global_timers import timeit
+import torch
 from src.data.data_utils import (
     player_name,
     team_name,

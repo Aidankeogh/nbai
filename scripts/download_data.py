@@ -10,6 +10,7 @@ extract_dir = "cache"
 if not os.path.exists(extract_dir):
     os.makedirs(extract_dir)
 
+print("Downloading...")
 with open(zip_path, "wb") as out:
     r = http.request("GET", url, preload_content=False)
     shutil.copyfileobj(r, out)

@@ -42,6 +42,7 @@ def load_raw_data(
         season_iter.extend([(y, season_type) for y in years])
 
     for in_season in season_iter:
+        print(in_season, timers.total())
 
         out_data = {
             "season_info": None,
@@ -94,22 +95,22 @@ def accumulate_box_stats(db):
 
         for key in rosters.keys():
             rosters[key] = list(rosters[key])
-            stats[key] = Box_stats(rosters[key])
+            stats[key] = Box_stats()
         rosters = dict(rosters)
 
         for play in plays:
             try:
-                off_stats, def_stats = parse_box_stats(play, rosters)
+                off_stats, def_stats = parse_box_stats(play)
                 stats[play.offense_team] += off_stats
                 stats[play.defense_team] += def_stats
             except Exception as e:
                 print(e)
         all_stats[season] = stats
 
-        for k, v in stats.items():
-            print(season, k)
-            db[f"box_stats/{season}/{k}"] = v.data
-            os.makedirs(f"metadata/rosters", exist_ok=True)
+        # for k, v in stats.items():
+        #    print(season, k)
+        #    db[f"box_stats/{season}/{k}"] = v.data
+        #    os.makedirs(f"metadata/rosters", exist_ok=True)
         with open(f"metadata/rosters/{season}", "wb") as f:
             msgpack.dump(rosters, f)
     db["box_stats_accumulated"] = True
@@ -125,13 +126,13 @@ if __name__ == "__main__":
 
     with h5py.File(db_path, "a") as db:
         load_raw_data(db, years=[2018], season_types=["Playoffs"])
-        accumulate_box_stats(db)
-        with open("metadata/rosters/2018_playoffs", "rb") as f:
-            rosters = msgpack.load(f)
-        box_stats = Box_stats(rosters["GSW"], db["box_stats/2018_playoffs/GSW"][:])
+        box_stats = accumulate_box_stats(db)
+        # with open("metadata/rosters/2018_playoffs", "rb") as f:
+        #    rosters = msgpack.load(f)
+        # box_stats = Box_stats(db["box_stats/2018_playoffs/GSW"][:])
 
     print(box_stats)
-    steph_stats = box_stats["stephen-curry", :]
+    steph_stats = box_stats["2018_playoffs"]["GSW"]["stephen-curry", :]
     incorrect_steph_stats = [
         379,
         142,

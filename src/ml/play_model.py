@@ -142,7 +142,10 @@ class PlayModel(LightningModule):
         defense_roster = self.defense_encoder(defense_roster)
 
         # Update player encodings, letting them attend to the players on the other team.
-        # Offense is most important, so compute defense first to feed better defensive embeddings into ofPlayModel
+        # Offense is most important, so compute defense first to feed better defensive embeddings into of
+        defense_roster = self.defense_decoder(defense_roster, offense_roster)
+        offense_roster = self.offense_decoder(offense_roster, defense_roster)
+
         # Now compute team embeddings
         offense_team = self.offense_team_decoder(offense_team, offense_roster)
         defense_team = self.defense_team_decoder(defense_team, defense_roster)
@@ -165,10 +168,7 @@ class PlayModel(LightningModule):
 
         # Run through backbone
         (
-            offense_roster,
-            defense_roster,
-            offense_team,
-            defense_team,
+            offense_roster, defense_roster, offense_team, defense_team,
         ) = self.transformer_backbone(
             offense_roster, defense_roster, offense_team, defense_team
         )

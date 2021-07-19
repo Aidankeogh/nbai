@@ -44,7 +44,7 @@ def format_data(batch):
     for key in to_extract:
         temp = torch.tensor(batch[:, play_indices[key]]).long()
         if len(temp.shape) == 1:
-            temp = temp.unsqueeze(dim=0)
+            temp = temp.unsqueeze(dim=1)
         if key in play_config.embedding_choices:
             # If it's an embedding choice, get the one hot rather than just the embedding value
             # The one hot should correspond to which player it was that did the action, e.g. shooting
@@ -52,7 +52,6 @@ def format_data(batch):
             temp = torch.argmax(temp, dim=1)
         if key in play_config.is_choice and play_config.is_choice[key]:
             temp = torch.argmax(temp, dim=1)
-
         data[key] = temp
 
         if key in play_config.triggers:

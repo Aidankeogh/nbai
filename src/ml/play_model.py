@@ -6,6 +6,7 @@ from pytorch_lightning import Trainer
 from src.thought_path import DataConfig
 from torchmetrics import Accuracy
 from pprint import pprint
+from src.ml.play_metrics import get_game, get_predicted_stats
 import torch.nn as nn
 import torch
 
@@ -112,11 +113,12 @@ class PlayModel(LightningModule):
         )
 
         self.shooter = feedforward(embedding_dim, shooter_hidden, 1)
-        self.shot_made = feedforward(
-            embedding_dim, shot_made_hidden, 1, final=nn.Sigmoid()
-        )
         self.shot_type = feedforward(
             embedding_dim, shot_type_hidden, 5, final=nn.Softmax(dim=1)
+        )
+        # One for each shot type, P(shot_made | shot_type)
+        self.shot_made = feedforward(
+            embedding_dim, shot_made_hidden, 5, final=nn.Sigmoid()
         )
 
     def create_losses(
@@ -162,9 +164,9 @@ class PlayModel(LightningModule):
         defense_roster = self.player_embeddings(defense_roster.permute(1, 0))
 
         offense_team = play["offense_team"]
-        offense_team = self.team_embeddings(offense_team)
+        offense_team = self.team_embeddings(offense_team.permute(1, 0))
         defense_team = play["defense_team"]
-        defense_team = self.team_embeddings(defense_team)
+        defense_team = self.team_embeddings(defense_team.permute(1, 0))
 
         # Run through backbone
         (
@@ -190,8 +192,8 @@ class PlayModel(LightningModule):
             "shooter": apply_per_player(
                 self.shooter, offense_roster, softmax_over_players=True
             ),
-            "shot_made": apply_per_player(self.shot_made, offense_roster),
             "shot_type": apply_per_player(self.shot_type, offense_roster),
+            "shot_made": apply_per_player(self.shot_made, offense_roster),
         }
 
         return out_dict
@@ -215,7 +217,7 @@ class PlayModel(LightningModule):
 
         # Just get the shot type and shot made probabilities for the shooter, ignore all other players
         arange = torch.arange(targets["shooter"].shape[0])
-        shot_made_outputs = outputs["shot_made"][arange, targets["shooter"]]
+        shot_made_outputs = outputs["shot_made"][arange, targets["shooter"], targets["shot_type"]]
         shot_type_outputs = outputs["shot_type"][arange, targets["shooter"], :]
 
         loss_dict["shot_made"] = self.shot_made_loss(
@@ -258,17 +260,18 @@ class PlayModel(LightningModule):
 
         mask = self.validity["shooter"].nonzero().squeeze()
         valid_shooters = self.targets["shooter"][mask]
+        valid_shot_types = self.targets["shot_type"][mask]
 
         self.shooter_accuracy(self.outputs["shooter"][mask], valid_shooters)
 
         self.shot_made_accuracy(
-            self.outputs["shot_made"][mask, valid_shooters],
+            self.outputs["shot_made"][mask, valid_shooters, valid_shot_types],
             self.targets["shot_made"].squeeze()[mask],
         )
 
         self.shot_type_accuracy(
             self.outputs["shot_type"][mask, valid_shooters, :],
-            self.targets["shot_type"][mask],
+            valid_shot_types,
         )
 
         self.log("train_loss", outputs)
@@ -286,13 +289,16 @@ class PlayModel(LightningModule):
         self.log("summed_accuracy", (iea + sa + sma + sta) / 4)
         if self.curr_epoch % 40 == 0:
             self.print(iea, sa, sma, sta)
+            predicted_box_stats = get_predicted_stats(self, get_game())
+            for v in predicted_box_stats.values():
+                self.print(v)
 
     def training_epoch_end(self, outs) -> None:
         self.curr_epoch += 1
         self.scheduler.step()
 
     def configure_optimizers(self):
-        ep_up = self.epochs // 4
+        ep_up = self.epochs // 4 + 1
         ep_down = self.epochs - ep_up
         optim = torch.optim.Adam(self.parameters(), lr=0.02)
         self.scheduler = torch.optim.lr_scheduler.CyclicLR(
@@ -306,7 +312,7 @@ if __name__ == "__main__":
     from src.data.game import Game
 
     db_name = "cache/ml_db_0.0.1.h5"
-    datamodule = PlayModule(db_name=db_name, batch_size=32000, num_workers=4)
+    datamodule = PlayModule(db_name=db_name, batch_size=32000, num_workers=0)
 
     with h5py.File(db_name, "r", libver="latest", swmr=True) as db:
         test_game = Game(db["raw_data/2016_playoffs/games"][-4])
@@ -314,7 +320,7 @@ if __name__ == "__main__":
             test_game.play_start_idx : test_game.play_end_idx
         ]
 
-    model = PlayModel(epochs=5)
+    model = PlayModel(epochs=2)
 
     print(parse_multiple_plays(test_plays))
     print(model(format_data(test_plays)))
@@ -323,7 +329,7 @@ if __name__ == "__main__":
         logger=True,
         checkpoint_callback=False,
         max_epochs=model.epochs,
-        gpus=[0],
+        gpus=None,
     )
 
     trainer.fit(model, datamodule)

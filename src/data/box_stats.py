@@ -41,6 +41,8 @@ class Box_stats:
         player, category = key
         if player == "none":
             return None
+        if player not in self.data:
+            self.data[player] = torch.zeros(len(categories))
 
         if type(category) is slice:
             category_idx = category

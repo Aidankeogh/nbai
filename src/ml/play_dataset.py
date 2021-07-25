@@ -113,7 +113,7 @@ class PlayDataset(Dataset):
 
 
 class BatchedPlayDataset(PlayDataset):
-    def __init__(self, batch_size=32, **kwargs):
+    def __init__(self, batch_size=32, shuffle_indices=True, **kwargs):
         super().__init__(**kwargs)
 
         self.batch_size = batch_size
@@ -128,6 +128,7 @@ class BatchedPlayDataset(PlayDataset):
 
         self.current_season = -1
         self.available_batches = 0
+        self.shuffle_indices = shuffle_indices
 
     def __len__(self):
         return self.n_batches
@@ -143,7 +144,8 @@ class BatchedPlayDataset(PlayDataset):
             self.cache = self.db[f"raw_data/{self.season}/plays"][:]
             self.cache_len = len(self.cache)
             self.batch_order = list(range(self.cache_len))
-            random.shuffle(self.batch_order)
+            if self.shuffle_indices:
+                random.shuffle(self.batch_order)
         idx_in_cache = idx - self.cache_start_position
         batch_start_idx = idx_in_cache * self.batch_size
         indices = self.batch_order[batch_start_idx : batch_start_idx + self.batch_size]
@@ -174,6 +176,7 @@ class PlayModule(LightningDataModule):
         batch_size: int = 32,
         val_seasons: int = 4,
         num_workers: int = 0,
+        **kwargs
     ):
         super().__init__()
         self.db_name = db_name
@@ -181,6 +184,8 @@ class PlayModule(LightningDataModule):
         self.num_workers = num_workers
         self.val_seasons = get_seasons([2016])
         self.train_seasons = [i for i in get_seasons() if i not in self.val_seasons]
+        self.dset_args = kwargs
+        print(self.dset_args)
 
     def setup(self, stage=None):
         self.train_set = BatchedPlayDataset(
@@ -188,12 +193,14 @@ class PlayModule(LightningDataModule):
             seasons=self.train_seasons,
             db_name=self.db_name,
             dp=self.num_workers > 0,
+            **self.dset_args
         )
         self.val_set = BatchedPlayDataset(
             batch_size=self.batch_size,
             seasons=self.val_seasons,
             db_name=self.db_name,
             dp=self.num_workers > 0,
+            **self.dset_args
         )
         self.test_set = self.val_set
 

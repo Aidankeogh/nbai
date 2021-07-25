@@ -1,3 +1,4 @@
+from torch._C import ParameterDict
 from src.ml.play_dataset import PlayModule, format_data
 from src.data.play import Play
 from src.data.box_stats import parse_multiple_plays
@@ -9,7 +10,9 @@ from pprint import pprint
 from src.ml.play_metrics import get_game, get_predicted_stats
 import torch.nn as nn
 import torch
-
+import transformers
+from transformers import GPT2Model, BertModel, BertConfig, T5EncoderModel
+transformers.logging.ERROR
 
 def create_encoder(dim, nhead, dim_feedforward, n_layers):
     layer = nn.TransformerEncoderLayer(dim, nhead, dim_feedforward)
@@ -23,8 +26,32 @@ def create_decoder(dim, nhead, dim_feedforward, n_layers):
     return decoder
 
 
-def feedforward(embedding, hidden, out, final=None, activation=nn.ReLU()):
-    layers = [nn.Linear(embedding, hidden), activation, nn.Linear(hidden, out)]
+# class Normshift(nn.Module):T5EncoderModel
+#     def __init__(self):
+#         super().__init__()
+#         self.min = nn.Parameter(torch.rand(1))
+#         self.range = nn.Parameter(torch.rand(1))
+#         self.bn = nn.BatchNorm1d(1)
+    
+#     def forward(self, x):
+#         prev_shape = x.shape
+#         x = self.bn(x.view(-1, 1)).view(prev_shape)
+
+#         return (torch.sigmoid(x) * self.range) + self.min
+        
+
+def feedforward(embedding, hidden, out, final=None, activation=nn.Mish(), type="linear", bn=False):
+    layers = []
+    if bn:
+        layers.append(nn.BatchNorm1d(embedding))
+
+    if type == "linear":
+        layers += [nn.Linear(embedding, out)]
+    elif type == "nonlinear":
+        layers += [nn.Linear(embedding, hidden), activation, nn.Linear(hidden, out)]
+    else:
+        raise f"Usupported head type {type}"
+
     if final is not None:
         layers.append(final)
 
@@ -53,13 +80,15 @@ def apply_mask(outputs, targets, validity):
 
 
 class PlayModel(LightningModule):
-    def __init__(self, epochs=4, min_lr=0.1, max_lr=1.0, **kwargs):
+    def __init__(self, epochs=4, lr=1e-5, lr_backbone=0, weight_decay=0, print_every=1, **kwargs):
         super().__init__()
 
         self.epochs = epochs
         self.curr_epoch = 0
-        self.min_lr = min_lr
-        self.max_lr = max_lr
+        self.lr = lr
+        self.lr_backbone = lr_backbone
+        self.weight_decay = weight_decay
+        self.print_every = print_every
 
         self.create_backbone(**kwargs)
         self.create_heads(**kwargs)
@@ -69,88 +98,124 @@ class PlayModel(LightningModule):
     def create_backbone(
         self,
         embedding_dim=32,
-        n_heads=8,
-        # off_el = Offense encoder layers, def_dff = defense dim_feedforward, etc.
-        off_el=3,
-        off_dl=2,
-        off_dff=64,
-        def_el=3,
-        def_dl=1,
-        def_dff=64,
-        off_team_dl=3,
-        off_team_dff=64,
-        def_team_dl=3,
-        def_team_dff=64,
+        model_dim=512,
+        n_layers=3,
+        add_upsampled=False,
         **kwargs
     ):
         # <40 teams
         # <4000 players
         self.team_embeddings = nn.Embedding(40, embedding_dim)
+        self.team_offense_upsample = nn.Sequential(
+            nn.Conv1d(embedding_dim, model_dim, 1),
+            nn.BatchNorm1d(model_dim)
+        )
+        self.team_defense_upsample = nn.Sequential(
+            nn.Conv1d(embedding_dim, model_dim, 1),
+            nn.BatchNorm1d(model_dim)
+        )
         self.player_embeddings = nn.Embedding(4000, embedding_dim)
-        self.offense_encoder = create_encoder(embedding_dim, n_heads, off_dff, off_el)
-        self.offense_decoder = create_decoder(embedding_dim, n_heads, off_dff, off_dl)
-        self.offense_team_decoder = create_decoder(
-            embedding_dim, n_heads, off_team_dff, off_team_dl
+        self.player_offense_upsample = nn.Sequential(
+            nn.Conv1d(embedding_dim, model_dim, 1),
+            nn.BatchNorm1d(model_dim)
         )
+        self.player_defense_upsample = nn.Sequential(
+            nn.Conv1d(embedding_dim, model_dim, 1),
+            nn.BatchNorm1d(model_dim)
+        )
+        self.add_upsampled = add_upsampled
 
-        self.defense_encoder = create_encoder(embedding_dim, n_heads, def_dff, def_el)
-        self.defense_decoder = create_decoder(embedding_dim, n_heads, def_dff, def_dl)
-        self.defense_team_decoder = create_decoder(
-            embedding_dim, n_heads, def_team_dff, def_team_dl
-        )
+        self.embeddings = nn.ModuleDict([
+            ["team", self.team_embeddings],
+            ["player", self.player_embeddings],
+        ])
+        
+        #gpt2 = GPT2Model.from_pretrained('gpt2')
+        #self.backbone = gpt2.h[0:n_layers]
+        bert = BertModel(BertConfig())
+        t5 = T5EncoderModel.from_pretrained('t5-small')
+        #print(bert.encoder)
+        self.backbone = t5.encoder.block[0:n_layers]
+        #bert.encoder.layer[0:n_layers]
+        if self.lr_backbone == 0:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
 
     def create_heads(
         self,
-        embedding_dim=32,
+        model_dim=512,
         initial_event_hidden=256,
         shooter_hidden=256,
         shot_made_hidden=256,
         shot_type_hidden=256,
+        bn=True,
         **kwargs
     ):
         self.initial_event = feedforward(
-            embedding_dim * 2, initial_event_hidden, 5, final=nn.Softmax(dim=1)
+            model_dim * 2, initial_event_hidden, 5, final=nn.Softmax(dim=1), bn=bn
         )
 
-        self.shooter = feedforward(embedding_dim, shooter_hidden, 1)
+        self.shooter = feedforward(model_dim, shooter_hidden, 1, bn=bn)
         self.shot_type = feedforward(
-            embedding_dim, shot_type_hidden, 5, final=nn.Softmax(dim=1)
+            model_dim, shot_type_hidden, 5, final=nn.Softmax(dim=1), bn=bn
         )
         # One for each shot type, P(shot_made | shot_type)
         self.shot_made = feedforward(
-            embedding_dim, shot_made_hidden, 5, final=nn.Sigmoid()
+            model_dim, shot_made_hidden, 5, final=nn.Sigmoid(), bn=bn
         )
+        self.heads = nn.ModuleDict([
+            ["initial_event", self.initial_event],
+            ["shooter", self.shooter],
+            ["shot_type", self.shot_type],
+            ["shot_made", self.shot_made]
+        ])
 
     def create_losses(
-        self, initial_event_wt=1, shooter_wt=1, shot_made_wt=1, shot_type_wt=1, **kwargs
+        self, initial_event_wt=1, shooter_wt=1, shot_made_wt=1, shot_type_wt=1, box_wt=1, **kwargs
     ):
         self.initial_event_loss = nn.CrossEntropyLoss(reduction="mean")
         self.shooter_loss = nn.CrossEntropyLoss(reduction="none")
         self.shot_made_loss = nn.BCELoss(reduction="none")
         self.shot_type_loss = nn.CrossEntropyLoss(reduction="none")
+        self.box_loss = nn.MSELoss()
         self.loss_weights = {
             "initial_event": initial_event_wt,
             "shooter": shooter_wt,
             "shot_made": shot_made_wt,
             "shot_type": shot_type_wt,
+            "box": box_wt,
         }
 
     def transformer_backbone(
         self, offense_roster, defense_roster, offense_team, defense_team
     ):
+        offense_roster = self.player_embeddings(offense_roster)
+        offense_roster = self.player_offense_upsample(offense_roster.swapaxes(1,2)).swapaxes(1,2)
 
-        # Create player encodings (attending to other members on same team)
-        offense_roster = self.offense_encoder(offense_roster)
-        defense_roster = self.defense_encoder(defense_roster)
+        defense_roster = self.player_embeddings(defense_roster)
+        defense_roster = self.player_defense_upsample(defense_roster.swapaxes(1,2)).swapaxes(1,2)
 
-        # Update player encodings, letting them attend to the players on the other team.
-        # Offense is most important, so compute defense first to feed better defensive embeddings into of
-        defense_roster = self.defense_decoder(defense_roster, offense_roster)
-        offense_roster = self.offense_decoder(offense_roster, defense_roster)
+        offense_team = self.team_embeddings(offense_team)
+        offense_team = self.team_offense_upsample(offense_team.swapaxes(1,2)).swapaxes(1,2)
 
-        # Now compute team embeddings
-        offense_team = self.offense_team_decoder(offense_team, offense_roster)
-        defense_team = self.defense_team_decoder(defense_team, defense_roster)
+        defense_team = self.team_embeddings(defense_team)
+        defense_team = self.team_defense_upsample(defense_team.swapaxes(1,2)).swapaxes(1,2)
+
+        combined_rosters = torch.cat((offense_team, offense_roster, defense_team, defense_roster), dim=1)
+        for block in self.backbone:
+            hidden = block(combined_rosters)
+            combined_rosters = hidden[0]
+
+        if self.add_upsampled:
+            offense_team = offense_team + combined_rosters[:, 0:1]
+            offense_roster = offense_roster + combined_rosters[:, 1:6]
+            defense_team = defense_team + combined_rosters[:, 6:7]
+            defense_roster = defense_roster + combined_rosters[:, 7:12]
+        else:
+            offense_team = combined_rosters[:, 0:1]
+            offense_roster = combined_rosters[:, 1:6]
+            defense_team = combined_rosters[:, 6:7]
+            defense_roster = combined_rosters[:, 7:12]
 
         return offense_roster, defense_roster, offense_team, defense_team
 
@@ -159,14 +224,10 @@ class PlayModel(LightningModule):
 
         # Extract player and team embeddings
         offense_roster = play["offense_roster"]
-        offense_roster = self.player_embeddings(offense_roster.permute(1, 0))
         defense_roster = play["defense_roster"]
-        defense_roster = self.player_embeddings(defense_roster.permute(1, 0))
 
         offense_team = play["offense_team"]
-        offense_team = self.team_embeddings(offense_team.permute(1, 0))
         defense_team = play["defense_team"]
-        defense_team = self.team_embeddings(defense_team.permute(1, 0))
 
         # Run through backbone
         (
@@ -177,16 +238,15 @@ class PlayModel(LightningModule):
 
         # Swap the axes to make the batch dimensions are the traditional batch x player x ...
         # Instead of transformer output player x batch x ...
-        offense_roster, defense_roster = torch.swapaxes(
-            offense_roster, 0, 1
-        ), torch.swapaxes(defense_roster, 0, 1)
+        # offense_roster, defense_roster = torch.swapaxes(
+        #     offense_roster, 0, 1
+        # ), torch.swapaxes(defense_roster, 0, 1)
 
         # For team embeddings get rid of extra dim
-        offense_team, defense_team = offense_team.squeeze(dim=0), defense_team.squeeze(
-            dim=0
+        offense_team, defense_team = offense_team.squeeze(dim=1), defense_team.squeeze(
+            dim=1
         )
         teams_combined = torch.cat((offense_team, defense_team), dim=1)
-
         out_dict = {
             "initial_event": self.initial_event(teams_combined),
             "shooter": apply_per_player(
@@ -234,6 +294,13 @@ class PlayModel(LightningModule):
             loss_dict["shot_type"] * validity["shot_type"]
         )
 
+        gt_box_stats = get_ground_truth_stats(batch, self.device)
+        pred_box_stats = get_predicted_stats(targets, outputs)
+        loss_dict["box"] = 0
+        for player in gt_box_stats.keys():
+            for stat in gt_box_stats[player].keys():
+                loss_dict["box"] += self.box_loss(pred_box_stats[player][stat], gt_box_stats[player][stat])
+
         for k in loss_dict.keys():
             loss_dict[k] = loss_dict[k] * self.loss_weights[k]
 
@@ -241,6 +308,8 @@ class PlayModel(LightningModule):
 
     def training_step(self, batch, batch_idx) -> torch.Tensor:
         self.loss_dict = self.get_losses(batch)
+        for k, v in self.loss_dict.items():
+            self.log(f"l-{k}", v, prog_bar=True, on_step=True)
         return sum(self.loss_dict.values())
 
     def validation_step(self, batch, batch_idx) -> torch.Tensor:
@@ -287,23 +356,26 @@ class PlayModel(LightningModule):
         sta = self.shot_type_accuracy.compute()
         self.log("shot_type_accuracy", sta)
         self.log("summed_accuracy", (iea + sa + sma + sta) / 4)
-        if self.curr_epoch % 40 == 0:
+        if self.curr_epoch > 0 and self.curr_epoch % self.print_every == 0:
             self.print(iea, sa, sma, sta)
-            predicted_box_stats = get_predicted_stats(self, get_game())
-            for v in predicted_box_stats.values():
-                self.print(v)
+            predicted_box_stats = get_predicted_stats(self, get_game(), self.device)
+            print(predicted_box_stats)
 
     def training_epoch_end(self, outs) -> None:
         self.curr_epoch += 1
-        self.scheduler.step()
+        #self.scheduler.step()
 
     def configure_optimizers(self):
-        ep_up = self.epochs // 4 + 1
-        ep_down = self.epochs - ep_up
-        optim = torch.optim.Adam(self.parameters(), lr=0.02)
-        self.scheduler = torch.optim.lr_scheduler.CyclicLR(
-            optim, self.min_lr, self.max_lr, ep_up, ep_down, cycle_momentum=False
-        )
+        #ep_up = self.epochs // 4 + 1
+        #ep_down = self.epochs - ep_up
+        optim = torch.optim.AdamW([
+            {"params": self.embeddings.parameters(), },
+            {"params": self.heads.parameters()},
+            {"params": self.backbone.parameters(), 'lr': self.lr_backbone, 'weight_decay': 0} 
+        ], lr=self.lr, weight_decay=self.weight_decay)
+        #self.scheduler = torch.optim.lr_scheduler.CyclicLR(
+        #    optim, self.min_lr, self.max_lr, ep_up, ep_down, cycle_momentum=False
+        #)
         return optim
 
 
@@ -312,7 +384,7 @@ if __name__ == "__main__":
     from src.data.game import Game
 
     db_name = "cache/ml_db_0.0.1.h5"
-    datamodule = PlayModule(db_name=db_name, batch_size=32000, num_workers=0)
+    datamodule = PlayModule(db_name=db_name, batch_size=320, num_workers=0)
 
     with h5py.File(db_name, "r", libver="latest", swmr=True) as db:
         test_game = Game(db["raw_data/2016_playoffs/games"][-4])

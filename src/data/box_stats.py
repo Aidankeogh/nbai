@@ -80,7 +80,7 @@ class Box_stats:
 
     def __repr__(self):
         table = []
-        for player in sorted(self.data.keys()):
+        for player in sorted(self.data.keys(), key=lambda key: -self[key, "pts"]):
             if player is not None:
                 table.append([player] + list(self[player, :]))
         return tabulate(table, headers=[" "] + categories)

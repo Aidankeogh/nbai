@@ -3,6 +3,7 @@ from pytorch_lightning import LightningDataModule
 from torch.utils.data import Dataset, DataLoader
 from src.utilities.global_timers import timeit, timers
 from src.data.play import play_config
+from src.loader_pipeline import DB_NAME
 import h5py
 import atexit
 import torch
@@ -26,6 +27,8 @@ def custom_collate(batch):
 
 play_indices = play_config.data_indices
 play_indices.update(play_config.slice_keys)
+
+# The order for these matters!
 to_extract = [
     "offense_team",
     "defense_team",
@@ -33,8 +36,9 @@ to_extract = [
     "defense_roster",
     "initial_event",
     "shooter",
-    "shot_made",
     "shot_type",
+    "shot_fouled",
+    "shot_made",
 ]
 
 
@@ -60,16 +64,17 @@ def format_data(batch):
             for trigger in triggers:
                 trigger_valid = torch.ones(data[key].shape[0])
                 for trigger_key, trigger_value in trigger.items():
-                    if play_config.is_choice[trigger_key]:
+                    if trigger_key in play_config.is_choice and play_config.is_choice[trigger_key]:
                         trigger_idx = play_config.choice_indices[trigger_key][
                             trigger_value
                         ]
                         condition_satisfied = data[trigger_key] == trigger_idx
                     else:
-                        condition_satisfied = data[trigger_key] == trigger_value
+                        condition_satisfied = (data[trigger_key] == trigger_value).squeeze()
                     trigger_valid = torch.logical_and(
                         trigger_valid, condition_satisfied
                     )
+            
                 validity[key] = torch.logical_or(validity[key], trigger_valid)
 
     return data, validity
@@ -77,7 +82,7 @@ def format_data(batch):
 
 class PlayDataset(Dataset):
     def __init__(
-        self, seasons=all_seasons, db_name="cache/ml_db_0.0.1.h5", dp=False
+        self, seasons=all_seasons, db_name=DB_NAME, dp=False
     ) -> None:
         self.db_name = db_name
         self.seasons = seasons
@@ -172,9 +177,10 @@ def worker_init_fn(worker_id):
 class PlayModule(LightningDataModule):
     def __init__(
         self,
-        db_name: str = "cache/ml_db_0.0.1.h5",
+        db_name: str = DB_NAME,
         batch_size: int = 32,
-        val_seasons: int = 4,
+        val_seasons: list = [2016],
+        train_seasons: list = range(2001, 2020),
         num_workers: int = 0,
         **kwargs
     ):
@@ -182,8 +188,8 @@ class PlayModule(LightningDataModule):
         self.db_name = db_name
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.val_seasons = get_seasons([2016])
-        self.train_seasons = [i for i in get_seasons() if i not in self.val_seasons]
+        self.val_seasons = get_seasons(val_seasons)
+        self.train_seasons = [i for i in get_seasons(train_seasons) if i not in self.val_seasons]
         self.dset_args = kwargs
         print(self.dset_args)
 

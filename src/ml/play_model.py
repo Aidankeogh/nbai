@@ -7,7 +7,9 @@ from pytorch_lightning import Trainer
 from src.thought_path import DataConfig
 from torchmetrics import Accuracy
 from pprint import pprint
-from src.ml.play_metrics import get_game, get_predicted_stats
+from src.ml.play_metrics import get_game, get_predicted_stats, extract_stats, extract_gt_stats
+from src.loader_pipeline import DB_NAME
+from src.utilities.global_ema import ema
 import torch.nn as nn
 import torch
 import transformers
@@ -80,15 +82,16 @@ def apply_mask(outputs, targets, validity):
 
 
 class PlayModel(LightningModule):
-    def __init__(self, epochs=4, lr=1e-5, lr_backbone=0, weight_decay=0, print_every=1, **kwargs):
+    def __init__(self, epochs=4, lr=1e-5, lr_backbone=0, weight_decay=0, print_every=1, batch_size=1280, **kwargs):
         super().__init__()
-
+        self.save_hyperparameters()
         self.epochs = epochs
         self.curr_epoch = 0
         self.lr = lr
         self.lr_backbone = lr_backbone
         self.weight_decay = weight_decay
         self.print_every = print_every
+        self.batch_size = batch_size
 
         self.create_backbone(**kwargs)
         self.create_heads(**kwargs)
@@ -101,6 +104,7 @@ class PlayModel(LightningModule):
         model_dim=512,
         n_layers=3,
         add_upsampled=False,
+        remove_team=False,
         **kwargs
     ):
         # <40 teams
@@ -124,6 +128,7 @@ class PlayModel(LightningModule):
             nn.BatchNorm1d(model_dim)
         )
         self.add_upsampled = add_upsampled
+        self.remove_team = remove_team
 
         self.embeddings = nn.ModuleDict([
             ["team", self.team_embeddings],
@@ -228,6 +233,9 @@ class PlayModel(LightningModule):
 
         offense_team = play["offense_team"]
         defense_team = play["defense_team"]
+        if self.remove_team:
+            offense_team = offense_team * 0
+            defense_team = defense_team * 0
 
         # Run through backbone
         (
@@ -294,12 +302,15 @@ class PlayModel(LightningModule):
             loss_dict["shot_type"] * validity["shot_type"]
         )
 
-        gt_box_stats = get_ground_truth_stats(batch, self.device)
-        pred_box_stats = get_predicted_stats(targets, outputs)
+        pred_box_stats = extract_stats(targets, outputs)
+        gt_box_stats = extract_gt_stats(targets, validity)
         loss_dict["box"] = 0
         for player in gt_box_stats.keys():
             for stat in gt_box_stats[player].keys():
-                loss_dict["box"] += self.box_loss(pred_box_stats[player][stat], gt_box_stats[player][stat])
+                if stat == "o_pos":
+                    continue
+                loss_dict["box"] += self.box_loss(pred_box_stats[player][stat].float(), gt_box_stats[player][stat].float())
+        loss_dict["box"] = loss_dict["box"] / self.batch_size
 
         for k in loss_dict.keys():
             loss_dict[k] = loss_dict[k] * self.loss_weights[k]
@@ -309,12 +320,14 @@ class PlayModel(LightningModule):
     def training_step(self, batch, batch_idx) -> torch.Tensor:
         self.loss_dict = self.get_losses(batch)
         for k, v in self.loss_dict.items():
-            self.log(f"l-{k}", v, prog_bar=True, on_step=True)
+            self.log(f"l-{k}", ema(k, v), prog_bar=True, on_step=True)
         return sum(self.loss_dict.values())
 
     def validation_step(self, batch, batch_idx) -> torch.Tensor:
         self.loss_dict = self.get_losses(batch)
-        return sum(self.loss_dict.values())
+        val_loss = sum(self.loss_dict.values())
+        self.log('val_loss', val_loss)
+        return val_loss
 
     def create_metrics(self, **kwargs):
         self.initial_event_accuracy = Accuracy(top_k=1)
@@ -358,7 +371,7 @@ class PlayModel(LightningModule):
         self.log("summed_accuracy", (iea + sa + sma + sta) / 4)
         if self.curr_epoch > 0 and self.curr_epoch % self.print_every == 0:
             self.print(iea, sa, sma, sta)
-            predicted_box_stats = get_predicted_stats(self, get_game(), self.device)
+            predicted_box_stats, gt_stats = get_predicted_stats(self, get_game(), self.device, as_box=True)
             print(predicted_box_stats)
 
     def training_epoch_end(self, outs) -> None:
@@ -383,7 +396,7 @@ if __name__ == "__main__":
     import h5py
     from src.data.game import Game
 
-    db_name = "cache/ml_db_0.0.1.h5"
+    db_name = "cache/ml_db_0.0.2.h5"
     datamodule = PlayModule(db_name=db_name, batch_size=320, num_workers=0)
 
     with h5py.File(db_name, "r", libver="latest", swmr=True) as db:
@@ -394,8 +407,8 @@ if __name__ == "__main__":
 
     model = PlayModel(epochs=2)
 
-    print(parse_multiple_plays(test_plays))
-    print(model(format_data(test_plays)))
+    # print(parse_multiple_plays(test_plays))
+    # print(model(format_data(test_plays)))
 
     trainer = Trainer(
         logger=True,

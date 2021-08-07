@@ -152,8 +152,9 @@ def parse_foul(play, event):
         play.offensive_fouler = fouler
         play.offensive_foul_drawer = fouled
     elif event.is_shooting_foul:
-        parse_teams(play, event)
         play.initial_event = "shot"
+        play.shooter = fouled
+        play.shot_type = "Foul"
         play.shot_fouled = 1
         play.shooting_fouler = fouler
         # if the player isn't there (substitution) keep walking back until they are there

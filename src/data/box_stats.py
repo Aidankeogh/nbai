@@ -99,7 +99,7 @@ def parse_box_stats(play):
         d_stats[player, "d_pos"] = 1 - play.is_second_chance
         d_stats[player, "d+-"] = -play.score_change
 
-    if play.shooter is not None:
+    if play.shooter is not None and play.shot_type != "Foul":
         o_stats[play.shooter, "2pa"] = not play.is_3
         o_stats[play.shooter, "2pm"] = play.shot_made and not play.is_3
         o_stats[play.shooter, "3pa"] = play.is_3
@@ -153,8 +153,11 @@ def parse_multiple_plays(plays):
 if __name__ == "__main__":
     import h5py
     from src.data.game import Game
+    from src.loader_pipeline import DB_NAME
 
-    db_name = "cache/ml_db_0.0.1.h5"
+    db_name = DB_NAME
+   
+    # https://www.basketball-reference.com/boxscores/201606100CLE.html
     with h5py.File(db_name, "r", libver="latest", swmr=True) as db:
         test_game = Game(db["raw_data/2016_playoffs/games"][-4])
         test_plays = db["raw_data/2016_playoffs/plays"][

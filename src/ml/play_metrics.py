@@ -7,11 +7,12 @@ from src.data.box_stats import parse_multiple_plays, Box_stats
 from src.thought_path import DataConfig
 from src.data.game import Game
 from src.utilities.embedding_utilities import get_name, get_idx
+from src.loader_pipeline import DB_NAME
 import yaml
 import torch
 import h5py
 
-def get_game(db_name = "cache/ml_db_0.0.1.h5", season="2016_playoffs", idx=-4):
+def get_game(db_name = DB_NAME, season="2016_playoffs", idx=-4):
     with h5py.File(db_name, "r", libver="latest", swmr=True) as db:
         test_game = Game(db[f"raw_data/{season}/games"][idx])
         test_plays = db[f"raw_data/{season}/plays"][
@@ -64,14 +65,15 @@ def extract_gt_stats(inputs, validity):
     offense_players_unique = torch.unique(inputs["offense_roster"])
     player_dict = {}
 
-    two_pointers = sum([inputs["shot_type"][validity["shot_type"]] == types_2pa for types_2pa in indices_for_2pa])
-    three_pointers = sum([inputs["shot_type"][validity["shot_type"]] == types_3pa for types_3pa in indices_for_3pa])
-    shots_made = inputs["shot_made"][validity["shot_made"]].squeeze() == 1
+    validity_mask = validity["shot_made"]
+    two_pointers = sum([inputs["shot_type"][validity_mask] == types_2pa for types_2pa in indices_for_2pa])
+    three_pointers = sum([inputs["shot_type"][validity_mask] == types_3pa for types_3pa in indices_for_3pa])
+    shots_made = inputs["shot_made"][validity_mask].squeeze() == 1
     two_pointers_made = two_pointers * shots_made
     three_pointers_made = three_pointers * shots_made
 
     arange = torch.arange(inputs["shooter"].shape[0])
-    shooter_ids = inputs["offense_roster"][arange, inputs["shooter"]][validity["shooter"]]
+    shooter_ids = inputs["offense_roster"][arange, inputs["shooter"]][validity_mask]
 
     for unique_player in offense_players_unique:
         stat_dict = {}
@@ -117,11 +119,17 @@ def get_predicted_stats(model, test_plays, device="cpu", as_box=True):
 
 if __name__ == "__main__":
     from src.ml.play_model import PlayModel
-    test_plays = get_game()
-    model = PlayModel() 
+    test_plays = get_game(idx=-8)
+
+    inputs, validity = format_data(test_plays)
+    model = PlayModel.load_from_checkpoint("cache/models/0.0.2/0.0.1-epoch=05-val_loss=8.45.ckpt")
     player_stats, gt_stats = get_predicted_stats(model, test_plays, as_box=True)
-
+    
     print(player_stats)
-
     print(gt_stats)
-    print(parse_multiple_plays(test_plays))
+    # print(parse_multiple_plays(test_plays)["GSW"])
+    # for p in test_plays:
+    #     pp = Play(p)
+    #     print(pp)
+    #     print(pp.shot_fouled)
+    #     print(pp.free_thrower)

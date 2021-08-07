@@ -2,7 +2,7 @@ from src.data.batch_loader import load_raw_data, accumulate_box_stats
 from src.data.game import Game
 import h5py
 
-DB_NAME = "cache/ml_db_0.0.1.h5"
+DB_NAME = "cache/ml_db_0.0.2.h5"
 
 open_db = lambda: h5py.File(DB_NAME, "a")
 

@@ -8,7 +8,7 @@ open_db = lambda: h5py.File(DB_NAME, "a")
 
 with h5py.File(DB_NAME, "a") as db:
     if "raw_data_loaded" not in db:
-        load_raw_data(db, years=range(2001, 2020))
+        load_raw_data(db, years=range(2016, 2017))
 
 with h5py.File(DB_NAME, "a") as db:
     if "box_stats_accumulated" not in db:

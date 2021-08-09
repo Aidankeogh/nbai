@@ -20,14 +20,14 @@ tf.io.gfile = tb.compat.tensorflow_stub.io.gfile
 def objective(trial: optuna.trial.Trial) -> float:
     args = {
         "epochs": 30,
-        "lr": 1e-3, #trial.suggest_loguniform("lr", 1e-5, 1e-1),
+        "lr": 1e-4, #trial.suggest_loguniform("lr", 1e-5, 1e-1),
         "lr_backbone": 1e-5, #trial.suggest_loguniform("lr_backbone", 1e-10, 1e-5),
         "weight_decay": 1e-3, # trial.suggest_loguniform("min_lr", 1e-8, 1e-5),
-        "embedding_dim": 32,  # Will be made a multiple of n_heads
-        "n_layers": 12, # trial.suggest_int("n_layers", 1, 4), # 12,
+        "embedding_dim": 64,  # Will be made a multiple of n_heads
+        "n_layers": 2, # trial.suggest_int("n_layers", 1, 4), # 12,
         "add_upsampled": True,
         "remove_team": True,
-        "batch_size": 1280,
+        "batch_size": 640,
         "initial_event_wt": 0.5,  #trial.suggest_uniform("initial_event_wt", 0, 1),
         "shooter_wt": 1,  #trial.suggest_uniform("shooter_wt", 0, 1),
         "shot_made_wt": 4,  #trial.suggest_uniform("shot_made_wt", 0, 1),
@@ -55,7 +55,7 @@ def objective(trial: optuna.trial.Trial) -> float:
         default_root_dir='cache',
         logger=tb_logger,
         max_epochs=args["epochs"],
-        gpus=[0],
+        gpus=None,#[0],
         callbacks=[optuna_callback, checkpoint_callback],
     )
 

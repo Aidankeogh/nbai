@@ -165,7 +165,6 @@ rebound_type:
   choices: [offensive, defensive]
   triggers:
     - shot_made: false
-    - last_free_throw_made: false
 
 offensive_rebounder:
   type: embedding

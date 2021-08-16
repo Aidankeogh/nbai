@@ -1,8 +1,9 @@
-from src.ml.modules.basic import TransformerPointwise
+from src.ml.modules.basic import TransformerPointwise, BaseHead
 import torch.nn as nn
 import torch
 
-class InitialEventHead(nn.Module):
+class InitialEventHead(BaseHead):
+    key = "initial_event"
     def __init__(
         self,
         model_dim=512,
@@ -15,7 +16,7 @@ class InitialEventHead(nn.Module):
         self.sm = nn.Softmax(dim=1)
         self.loss = nn.CrossEntropyLoss(reduction="mean")
 
-    def forward(self, offense_team, defense_team):
+    def forward(self, offense_team, defense_team, **kwargs):
 
         teams_combined = torch.cat((offense_team, defense_team), dim=2)
         x = self.conv(teams_combined)

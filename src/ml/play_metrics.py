@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import DefaultDict
 
 from torch._C import device
@@ -34,10 +35,12 @@ indices_for_3pa = torch.tensor([
 def extract_stats(inputs, outputs):
     shot_taken_prob = outputs["initial_event"][:, play_config.choice_indices["initial_event"]["shot"]].unsqueeze(1).unsqueeze(2)
     shooter_probs = outputs["shooter"].unsqueeze(2)
+    shooting_fouler_probs = outputs["shooting_fouler"].unsqueeze(2)
     shot_type_probs = outputs["shot_type"]
     shot_made_probs = outputs["shot_made"]
     joint_shot_attempted = shot_taken_prob * shooter_probs * shot_type_probs
     joint_shot_made = joint_shot_attempted * shot_made_probs
+    joint_shooting_fouler_prob = shot_taken_prob * shooting_fouler_probs
 
     joint_2pa = joint_shot_attempted[:, :, indices_for_2pa].sum(dim=2)
     joint_3pa = joint_shot_attempted[:, :, indices_for_3pa].sum(dim=2)
@@ -45,10 +48,11 @@ def extract_stats(inputs, outputs):
     joint_2pm = joint_shot_made[:, :, indices_for_2pa].sum(dim=2)
     joint_3pm = joint_shot_made[:, :, indices_for_3pa].sum(dim=2)
     offense_players_unique = torch.unique(inputs["offense_roster"])
+    defense_players_unique = torch.unique(inputs["defense_roster"])
+    player_dict = defaultdict(dict)
 
-    player_dict = {}
     for unique_player in offense_players_unique:
-        stat_dict = {}
+        stat_dict = defaultdict(lambda : torch.zeros(1))
         valid_indices = inputs["offense_roster"] == unique_player
         stat_dict['2pa'] = joint_2pa[valid_indices].sum()
         stat_dict['3pa'] = joint_3pa[valid_indices].sum()
@@ -57,13 +61,22 @@ def extract_stats(inputs, outputs):
         stat_dict['pts'] = stat_dict['2pm'] * 2 + stat_dict['3pm'] * 3
         stat_dict["o_pos"] = valid_indices.sum()
         name = get_name(unique_player)
-        player_dict[name] = stat_dict
+        player_dict[name].update(stat_dict)
 
+    for unique_player in defense_players_unique:
+        stat_dict = defaultdict(lambda : torch.zeros(1))
+        valid_indices = inputs["defense_roster"] == unique_player
+        stat_dict["pfs"] = joint_shooting_fouler_prob[valid_indices].sum()
+        stat_dict["d_pos"] = valid_indices.sum()
+        name = get_name(unique_player)
+        player_dict[name].update(stat_dict)
+    
     return player_dict
 
 def extract_gt_stats(inputs, validity):
     offense_players_unique = torch.unique(inputs["offense_roster"])
-    player_dict = {}
+    defense_players_unique = torch.unique(inputs["defense_roster"])
+    player_dict = defaultdict(dict)
 
     validity_mask = validity["shot_made"]
     two_pointers = sum([inputs["shot_type"][validity_mask] == types_2pa for types_2pa in indices_for_2pa])
@@ -74,9 +87,10 @@ def extract_gt_stats(inputs, validity):
 
     arange = torch.arange(inputs["shooter"].shape[0])
     shooter_ids = inputs["offense_roster"][arange, inputs["shooter"]][validity_mask]
+    fouler_ids = inputs["defense_roster"][arange, inputs["shooting_fouler"]][validity["shooting_fouler"]]
 
     for unique_player in offense_players_unique:
-        stat_dict = {}
+        stat_dict = defaultdict(lambda : torch.zeros(1))
         valid_indices = inputs["offense_roster"] == unique_player
 
         shooter_indices = shooter_ids == unique_player
@@ -87,19 +101,24 @@ def extract_gt_stats(inputs, validity):
         stat_dict["pts"] = stat_dict["2pm"] * 2 + stat_dict["3pm"] * 3
         stat_dict["o_pos"] = valid_indices.sum()
         name = get_name(unique_player)
-        player_dict[name] = stat_dict
+        player_dict[name].update(stat_dict)
 
+    for unique_player in defense_players_unique:
+        stat_dict = defaultdict(lambda : torch.zeros(1))
+        valid_indices = inputs["defense_roster"] == unique_player        
+        fouler_indices = fouler_ids == unique_player
+        stat_dict["pfs"] = fouler_indices.sum()
+        stat_dict["d_pos"] = valid_indices.sum()
+        name = get_name(unique_player)
+        player_dict[name].update(stat_dict)
+    
     return player_dict
 
 def load_to_box_stats(stats):
     box_stats = Box_stats()
-    for name, stats in stats.items():
-        box_stats[name, "2pa"] = stats['2pa'].item()
-        box_stats[name, "3pa"] = stats['3pa'].item()
-        box_stats[name, "2pm"] = stats['2pm'].item()
-        box_stats[name, "3pm"] = stats['3pm'].item()
-        box_stats[name, "pts"] = stats['pts'].item()
-        box_stats[name, "o_pos"] = stats['o_pos'].item()
+    for name, player_stats in stats.items():
+        for category, value in player_stats.items():
+            box_stats[name, category] = value.item()
     return box_stats
 
 def get_predicted_stats(model, test_plays, device="cpu", as_box=True):
@@ -119,10 +138,10 @@ def get_predicted_stats(model, test_plays, device="cpu", as_box=True):
 
 if __name__ == "__main__":
     from src.ml.play_model import PlayModel
-    test_plays = get_game(idx=-8)
+    test_plays = get_game(idx=-1)
 
     inputs, validity = format_data(test_plays)
-    model = PlayModel.load_from_checkpoint("cache/models/0.0.2/0.0.1-epoch=05-val_loss=8.45.ckpt")
+    model = PlayModel.load_from_checkpoint("runs/08.12-22:31-wonderful-trout/checkpoints/shot-epoch=17-val_loss=13.15.ckpt")
     player_stats, gt_stats = get_predicted_stats(model, test_plays, as_box=True)
     
     print(player_stats)

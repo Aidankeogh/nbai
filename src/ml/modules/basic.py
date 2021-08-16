@@ -25,3 +25,12 @@ class TransformerPointwise(nn.Module):
         x = self.activation(x)
         x = self.lin2(x).swapaxes(1, 2)
         return x
+
+class BaseHead(nn.Module):
+    key = None
+    stat_type = None
+    def stats_pred(self, outputs):
+        return {}
+
+    def stats_gt(self, inputs, validity):
+        return {}, None

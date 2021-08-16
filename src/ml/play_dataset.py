@@ -39,14 +39,25 @@ to_extract = [
     "shot_type",
     "shot_fouled",
     "shot_made",
+    "shooting_fouler",
+    "assisted",
+    "assister",
+    "blocked",
+    "blocker",
+    "turnoverer",
+    "rebound_type",
+    "offensive_rebounder",
+    "defensive_rebounder"
 ]
 
 
 def format_data(batch):
     data = {}
     validity = {}
+    if type(batch) is not torch.Tensor:
+        batch = torch.tensor(batch)
     for key in to_extract:
-        temp = torch.tensor(batch[:, play_indices[key]]).long()
+        temp = batch[:, play_indices[key]].long()
         if len(temp.shape) == 1:
             temp = temp.unsqueeze(dim=1)
         if key in play_config.embedding_choices:
@@ -71,10 +82,14 @@ def format_data(batch):
                         condition_satisfied = data[trigger_key] == trigger_idx
                     else:
                         condition_satisfied = (data[trigger_key] == trigger_value).squeeze()
+                    if trigger_key in validity:
+                        trigger_valid = torch.logical_and(
+                            trigger_valid, validity[trigger_key]
+                        )
                     trigger_valid = torch.logical_and(
                         trigger_valid, condition_satisfied
                     )
-            
+
                 validity[key] = torch.logical_or(validity[key], trigger_valid)
 
     return data, validity
@@ -159,7 +174,7 @@ class BatchedPlayDataset(PlayDataset):
 
 
 if __name__ == "__main__":
-    b = BatchedPlayDataset(3200)
+    b = BatchedPlayDataset(320)
     bl = DataLoader(b, collate_fn=custom_collate, batch_size=1, shuffle=False)
     timers["loading"].start()
     for batch in bl:

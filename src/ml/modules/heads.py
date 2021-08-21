@@ -11,7 +11,7 @@ class Heads(nn.ModuleDict):
         ShooterHead,
         ShotMadeHead,
         ShotTypeHead,
-        #ShotFouledHead,
+        ShotFouledHead,
         ShootingFoulerHead,
     ]
 
@@ -29,20 +29,18 @@ class Heads(nn.ModuleDict):
             "offense_team": offense_team, 
             "defense_team": defense_team
         }
-        out_dict = {key: head(**inputs) for key, head in self.items()}
+        out_dict = {}
+        for key, head in self.items():
+            out_dict[key] = head(**inputs)
         return out_dict
     
     def get_loss(self, outputs, targets, validity):
-        loss_dict = {key: head.get_loss(outputs, targets, validity) for key, head in self.items()} 
-        return loss_dict
-    
-    def get_pred_stats(self, inputs, outputs):
-        for head in self.values():
-            stats = head.stats_pred(outputs)
 
-    def get_gt_stats(self, inputs, validity):
-        for head in self.values():
-            stats, indices = head.stats_gt(inputs, validity)
+        loss_dict = {}
+        for key, head in self.items():
+            loss_dict[key] = head.get_loss(outputs, targets, validity)
+
+        return loss_dict
 
 if __name__ == "__main__":
     batch_size = 42

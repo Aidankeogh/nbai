@@ -71,30 +71,6 @@ class ShotTypeHead(BaseHead):
         loss = loss[validity["shot_type"]]
         loss = torch.mean(loss)
         return loss
-    
-    def stats_pred(self, outputs):
-        shot_taken_prob = outputs["initial_event"][:, play_config.choice_indices["initial_event"]["shot"]].unsqueeze(1).unsqueeze(2)
-        shooter_probs = outputs["shooter"].unsqueeze(2)
-        shot_type_probs = outputs["shot_type"]
-        joint_shot_attempted = shot_taken_prob * shooter_probs * shot_type_probs
-
-        return {
-            "2pa": joint_shot_attempted[:, :, indices_for_2pa].sum(dim=2),
-            "3pa": joint_shot_attempted[:, :, indices_for_3pa].sum(dim=2)
-        }
-
-    def stats_gt(self, inputs, validity):
-        validity_mask = validity["shot_made"]
-        two_pointers = sum([inputs["shot_type"][validity_mask] == types_2pa for types_2pa in indices_for_2pa])
-        three_pointers = sum([inputs["shot_type"][validity_mask] == types_3pa for types_3pa in indices_for_3pa])
-
-        arange = torch.arange(inputs["shooter"].shape[0])
-        shooter_ids = inputs["offense_roster"][arange, inputs["shooter"]][validity_mask]
-
-        return {
-            "2pa": two_pointers, 
-            "3pa": three_pointers
-        }, shooter_ids
 
 class ShotMadeHead(BaseHead):
     key = "shot_made"
@@ -125,31 +101,3 @@ class ShotMadeHead(BaseHead):
         loss = loss[validity["shot_made"]]
         loss = torch.mean(loss)
         return loss
-
-    def stats_pred(self, outputs):
-        shot_taken_prob = outputs["initial_event"][:, play_config.choice_indices["initial_event"]["shot"]].unsqueeze(1).unsqueeze(2)
-        shooter_probs = outputs["shooter"].unsqueeze(2)
-        shot_type_probs = outputs["shot_type"]
-        shot_made_probs = outputs["shot_made"]
-        joint_shot_made = shot_taken_prob * shooter_probs * shot_type_probs * shot_made_probs
-        
-        return {
-            "2pm": joint_shot_made[:, :, indices_for_2pa].sum(dim=2),
-            "3pm": joint_shot_made[:, :, indices_for_3pa].sum(dim=2)
-        }
-
-    def stats_gt(self, inputs, validity):
-        validity_mask = validity["shot_made"]
-        two_pointers = sum([inputs["shot_type"][validity_mask] == types_2pa for types_2pa in indices_for_2pa])
-        three_pointers = sum([inputs["shot_type"][validity_mask] == types_3pa for types_3pa in indices_for_3pa])
-        shots_made = inputs["shot_made"][validity_mask].squeeze() == 1
-        two_pointers_made = two_pointers * shots_made
-        three_pointers_made = three_pointers * shots_made
-
-        arange = torch.arange(inputs["shooter"].shape[0])
-        shooter_ids = inputs["offense_roster"][arange, inputs["shooter"]][validity_mask]
-
-        return {
-            "2pm": two_pointers_made, 
-            "3pm": three_pointers_made
-        }, shooter_ids

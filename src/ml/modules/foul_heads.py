@@ -28,24 +28,6 @@ class ShootingFoulerHead(BaseHead):
         loss = torch.mean(loss)
         return loss
 
-    def stats_pred(self, outputs):
-        shot_taken_prob = outputs["initial_event"][:, play_config.choice_indices["initial_event"]["shot"]].unsqueeze(1).unsqueeze(2)
-        shooting_fouler_probs = outputs["shooting_fouler"].unsqueeze(2)
-        joint_shooting_fouler_prob = shot_taken_prob * shooting_fouler_probs
-
-        return {
-            "pfs": joint_shooting_fouler_prob,
-        }
-
-    def stats_gt(self, inputs, validity):
-        arange = torch.arange(inputs["shooter"].shape[0])
-        fouler_ids = inputs["defense_roster"][arange, inputs["shooting_fouler"]][validity["shooting_fouler"]]
-        fouler_mask = torch.ones_like(fouler_ids)
-
-        return {
-            "pfs": fouler_mask,
-        }, fouler_ids
-
 class ShotFouledHead(BaseHead):
     key = "shot_fouled"
     def __init__(
@@ -65,10 +47,14 @@ class ShotFouledHead(BaseHead):
         return x
     
     def get_loss(self, outputs, targets, validity):
-        loss = self.loss(outputs["shot_fouled"], targets["shot_fouled"])
+        arange = torch.arange(targets["shooter"].shape[0])
+        shot_made_outputs = outputs["shot_fouled"][arange, targets["shooter"], targets["shot_type"]]
+
+        loss = self.loss(shot_made_outputs, targets["shot_fouled"].squeeze().float())
         loss = loss[validity["shot_fouled"]]
         loss = torch.mean(loss)
         return loss
+
 
 if __name__ == "__main__":
     head = ShotFouledHead

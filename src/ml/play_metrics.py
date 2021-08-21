@@ -35,18 +35,22 @@ indices_for_3pa = torch.tensor([
 def extract_stats(inputs, outputs):
     shot_taken_prob = outputs["initial_event"][:, play_config.choice_indices["initial_event"]["shot"]].unsqueeze(1).unsqueeze(2)
     shooter_probs = outputs["shooter"].unsqueeze(2)
-    shooting_fouler_probs = outputs["shooting_fouler"].unsqueeze(2)
     shot_type_probs = outputs["shot_type"]
     shot_made_probs = outputs["shot_made"]
     joint_shot_attempted = shot_taken_prob * shooter_probs * shot_type_probs
     joint_shot_made = joint_shot_attempted * shot_made_probs
-    joint_shooting_fouler_prob = shot_taken_prob * shooting_fouler_probs
 
     joint_2pa = joint_shot_attempted[:, :, indices_for_2pa].sum(dim=2)
     joint_3pa = joint_shot_attempted[:, :, indices_for_3pa].sum(dim=2)
 
     joint_2pm = joint_shot_made[:, :, indices_for_2pa].sum(dim=2)
     joint_3pm = joint_shot_made[:, :, indices_for_3pa].sum(dim=2)
+
+    shooting_fouler_probs = outputs["shooting_fouler"].unsqueeze(2)
+    shot_fouled_probs = outputs["shot_fouled"]
+    joint_shot_fouled_prob = joint_shot_attempted * shot_fouled_probs 
+    joint_shooting_fouler_prob = joint_shot_fouled_prob.sum(dim=2) * shooting_fouler_probs.squeeze()
+
     offense_players_unique = torch.unique(inputs["offense_roster"])
     defense_players_unique = torch.unique(inputs["defense_roster"])
     player_dict = defaultdict(dict)

@@ -1,5 +1,6 @@
 from src.data.batch_loader import load_raw_data, accumulate_box_stats
 from src.data.game import Game
+from shutil import copyfile
 import h5py
 
 DB_NAME = "cache/ml_db_0.0.2.h5"
@@ -13,3 +14,5 @@ with h5py.File(DB_NAME, "a") as db:
 with h5py.File(DB_NAME, "a") as db:
     if "box_stats_accumulated" not in db:
         accumulate_box_stats(db)
+
+copyfile(DB_NAME, DB_NAME + ".backup")

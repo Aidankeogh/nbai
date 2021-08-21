@@ -23,6 +23,7 @@ class PlayModel(LightningModule):
         self.save_hyperparameters()
         self.epochs = epochs
         self.curr_epoch = 0
+        self.step = 0
         self.lr = lr
         self.lr_backbone = lr_backbone
         self.weight_decay = weight_decay
@@ -36,16 +37,12 @@ class PlayModel(LightningModule):
         self.create_metrics(**kwargs)
 
     def create_losses(
-        self, initial_event_wt=1, shooter_wt=1, shot_made_wt=1, shot_type_wt=1, box_wt=1, **kwargs
+        self,
+        box_wt = 1,
+        **kwargs
     ):
         self.box_loss = nn.MSELoss()
-        self.loss_weights = {
-            "initial_event": initial_event_wt,
-            "shooter": shooter_wt,
-            "shot_made": shot_made_wt,
-            "shot_type": shot_type_wt,
-            "box": box_wt,
-        }
+        self.box_wt = box_wt
 
     def forward(self, batch):
         play, validity = batch
@@ -60,6 +57,15 @@ class PlayModel(LightningModule):
 
         # Create outputs
         out_dict = self.heads(offense_roster, defense_roster, offense_team, defense_team)
+        self.step += 1
+
+        if self.step % 2000 == 0:
+            print()
+            print("###", self.step, "###")
+            for k, v in out_dict.items():
+                print(k, v[0])
+            predicted_box_stats, gt_stats = get_predicted_stats(self, get_game(), self.device, as_box=True)
+            print(predicted_box_stats)
 
         return out_dict
 
@@ -84,11 +90,7 @@ class PlayModel(LightningModule):
                 if stat == "o_pos":
                     continue
                 loss_dict["box"] += self.box_loss(pred_box_stats[player][stat].float(), gt_box_stats[player][stat].float())
-        loss_dict["box"] = loss_dict["box"] / self.batch_size
-
-        # Apply loss weights
-        for k in loss_dict.keys():
-            loss_dict[k] = loss_dict[k] * self.loss_weights[k]
+        loss_dict["box"] = loss_dict["box"] * self.box_wt / self.batch_size
 
         return loss_dict
 

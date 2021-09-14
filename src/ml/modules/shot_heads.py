@@ -96,8 +96,64 @@ class ShotMadeHead(BaseHead):
     def get_loss(self, outputs, targets, validity):
         arange = torch.arange(targets["shooter"].shape[0])
         shot_made_outputs = outputs["shot_made"][arange, targets["shooter"], targets["shot_type"]]
-
         loss = self.loss(shot_made_outputs, targets["shot_made"].squeeze().float())
         loss = loss[validity["shot_made"]]
+        loss = torch.mean(loss)
+        return loss
+
+class ShotAssistedHead(BaseHead):
+    key = "assisted"
+    stat_type = "offense"
+    def __init__(
+        self,
+        model_dim=512,
+        shooter_hidden=0,
+        bn=True,
+        **kwargs
+    ):
+        super().__init__()
+        self.conv = TransformerPointwise(model_dim, 5, hidden=shooter_hidden, bn=bn)
+        self.sig = nn.Sigmoid()
+        self.loss = nn.BCELoss(reduction="none")
+        # 1 output per player, treated as the affinity for shot taking
+
+    def forward(self, offense_roster, **kwargs):
+        x = self.conv(offense_roster)
+        x = self.sig(x)
+        return x
+    
+    def get_loss(self, outputs, targets, validity):
+        arange = torch.arange(targets["shooter"].shape[0])
+        shot_assisted_outputs = outputs["assisted"][arange, targets["shooter"], targets["shot_type"]]
+        loss = self.loss(shot_assisted_outputs, targets["assisted"].squeeze().float())
+        loss = loss[validity["assisted"]]
+        loss = torch.mean(loss)
+        return loss
+
+class AssisterHead(BaseHead):
+    key = "assister"
+    stat_type = "offense"
+    def __init__(
+        self,
+        model_dim=512,
+        shot_type_hidden=0,
+        bn=True,
+        **kwargs
+    ):
+        super().__init__()
+        self.conv = TransformerPointwise(model_dim, 1, hidden=shot_type_hidden, bn=bn)
+        self.sm = nn.Softmax(dim=1)
+        # 5 outputs per player, treated as probability of each type of shot
+        self.loss = nn.CrossEntropyLoss(reduction="none")
+
+    def forward(self, offense_roster, **kwargs):
+        x = self.conv(offense_roster)
+        x = x.squeeze()
+        x = self.sm(x)
+        return x
+    
+    def get_loss(self, outputs, targets, validity):
+        loss = self.loss(outputs["assister"], targets["assister"])
+        loss = loss[validity["assister"]]
         loss = torch.mean(loss)
         return loss

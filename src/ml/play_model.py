@@ -89,7 +89,8 @@ class PlayModel(LightningModule):
             for stat in gt_box_stats[player].keys():
                 if stat == "o_pos":
                     continue
-                loss_dict["box"] += self.box_loss(pred_box_stats[player][stat].float(), gt_box_stats[player][stat].float())
+                component_loss = self.box_loss(pred_box_stats[player][stat].float(), gt_box_stats[player][stat].float())
+                loss_dict["box"] += component_loss
         loss_dict["box"] = loss_dict["box"] * self.box_wt / self.batch_size
 
         return loss_dict
@@ -97,7 +98,7 @@ class PlayModel(LightningModule):
     def training_step(self, batch, batch_idx) -> torch.Tensor:
         self.loss_dict = self.get_losses(batch)
         for k, v in self.loss_dict.items():
-            self.log(f"l-{k}", ema(k, v), prog_bar=True, on_step=True)
+            self.log(f"{k[0:3] + k[-2:]}", ema(k, v), prog_bar=True, on_step=True)
         return sum(self.loss_dict.values())
 
     def validation_step(self, batch, batch_idx) -> torch.Tensor:

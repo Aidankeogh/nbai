@@ -46,8 +46,12 @@ to_extract = [
     "blocker",
     "turnoverer",
     "rebound_type",
+    "free_thrower",
+    "free_throws_attempted",
+    "free_throws_made",
+    "last_free_throw_made",
     "offensive_rebounder",
-    "defensive_rebounder"
+    "defensive_rebounder",
 ]
 
 

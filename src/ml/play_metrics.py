@@ -35,8 +35,10 @@ indices_for_3pa = torch.tensor([
 def extract_stats(inputs, outputs):
     shot_taken_prob = outputs["initial_event"][:, play_config.choice_indices["initial_event"]["shot"]].unsqueeze(1).unsqueeze(2)
     shooter_probs = outputs["shooter"].unsqueeze(2)
+
     shot_type_probs = outputs["shot_type"]
     shot_made_probs = outputs["shot_made"]
+
     joint_shot_attempted = shot_taken_prob * shooter_probs * shot_type_probs
     joint_shot_made = joint_shot_attempted * shot_made_probs
 
@@ -45,6 +47,20 @@ def extract_stats(inputs, outputs):
 
     joint_2pm = joint_shot_made[:, :, indices_for_2pa].sum(dim=2)
     joint_3pm = joint_shot_made[:, :, indices_for_3pa].sum(dim=2)
+
+
+    free_throws_prob = outputs["free_throws"].unsqueeze(1).unsqueeze(2)
+    free_thrower_probs = outputs["free_thrower"].unsqueeze(2)
+
+    num_fta = outputs["free_throws_attempted"]
+    tot_fta = (num_fta[:,:, 1] + num_fta[:,:, 2] * 2 + num_fta[:,:, 3] * 3).unsqueeze(2)
+    joint_ft = free_throws_prob * free_thrower_probs
+    joint_fta = joint_ft * tot_fta
+    joint_ftm = joint_fta * outputs["free_throw_percentage"]
+
+    assister_probs = outputs["assister"]
+    assisted_probs = joint_shot_made * outputs["assisted"]
+    joint_assists = assister_probs * assisted_probs.sum(dim=2)
 
     shooting_fouler_probs = outputs["shooting_fouler"].unsqueeze(2)
     shot_fouled_probs = outputs["shot_fouled"]
@@ -62,7 +78,10 @@ def extract_stats(inputs, outputs):
         stat_dict['3pa'] = joint_3pa[valid_indices].sum()
         stat_dict['2pm'] = joint_2pm[valid_indices].sum()
         stat_dict['3pm'] = joint_3pm[valid_indices].sum()
-        stat_dict['pts'] = stat_dict['2pm'] * 2 + stat_dict['3pm'] * 3
+        stat_dict['fta'] = joint_fta[valid_indices].sum()
+        stat_dict['ftm'] = joint_ftm[valid_indices].sum()
+        stat_dict['ast'] = joint_assists[valid_indices].sum()
+        stat_dict['pts'] = stat_dict['2pm'] * 2 + stat_dict['3pm'] * 3 + stat_dict['ftm']
         stat_dict["o_pos"] = valid_indices.sum()
         name = get_name(unique_player)
         player_dict[name].update(stat_dict)
@@ -88,10 +107,14 @@ def extract_gt_stats(inputs, validity):
     shots_made = inputs["shot_made"][validity_mask].squeeze() == 1
     two_pointers_made = two_pointers * shots_made
     three_pointers_made = three_pointers * shots_made
+    free_throws_attempted = inputs["free_throws_attempted"][validity["free_throws_attempted"]]
+    free_throws_made = inputs["free_throws_made"][validity["free_throws_made"]]
 
     arange = torch.arange(inputs["shooter"].shape[0])
     shooter_ids = inputs["offense_roster"][arange, inputs["shooter"]][validity_mask]
     fouler_ids = inputs["defense_roster"][arange, inputs["shooting_fouler"]][validity["shooting_fouler"]]
+    free_thrower_ids = inputs["offense_roster"][arange, inputs["free_thrower"]][validity["free_thrower"]]
+    assister_ids = inputs["offense_roster"][arange, inputs["assister"]][validity["assister"]]
 
     for unique_player in offense_players_unique:
         stat_dict = defaultdict(lambda : torch.zeros(1))
@@ -102,7 +125,15 @@ def extract_gt_stats(inputs, validity):
         stat_dict["3pa"] = three_pointers[shooter_indices].sum()
         stat_dict["2pm"] = two_pointers_made[shooter_indices].sum()
         stat_dict["3pm"] = three_pointers_made[shooter_indices].sum()
-        stat_dict["pts"] = stat_dict["2pm"] * 2 + stat_dict["3pm"] * 3
+
+        free_thrower_indices = free_thrower_ids == unique_player
+        stat_dict["fta"] = free_throws_attempted[free_thrower_indices].sum()
+        stat_dict["ftm"] = free_throws_made[free_thrower_indices].sum()
+
+        assister_indices = assister_ids == unique_player
+        stat_dict["ast"] = assister_indices.sum()
+
+        stat_dict["pts"] = stat_dict["2pm"] * 2 + stat_dict["3pm"] * 3 + stat_dict["ftm"]
         stat_dict["o_pos"] = valid_indices.sum()
         name = get_name(unique_player)
         player_dict[name].update(stat_dict)
@@ -143,9 +174,10 @@ def get_predicted_stats(model, test_plays, device="cpu", as_box=True):
 if __name__ == "__main__":
     from src.ml.play_model import PlayModel
     test_plays = get_game(idx=-1)
+    # https://www.basketball-reference.com/boxscores/201606190GSW.html
 
     inputs, validity = format_data(test_plays)
-    model = PlayModel.load_from_checkpoint("runs/08.12-22:31-wonderful-trout/checkpoints/shot-epoch=17-val_loss=13.15.ckpt")
+    model = PlayModel() #.load_from_checkpoint("runs/08.12-22:31-wonderful-trout/checkpoints/shot-epoch=17-val_loss=13.15.ckpt")
     player_stats, gt_stats = get_predicted_stats(model, test_plays, as_box=True)
     
     print(player_stats)

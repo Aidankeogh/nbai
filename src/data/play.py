@@ -109,6 +109,9 @@ def parse_shot(play, event):
 
 
 def parse_free_throw(play, event):
+    play.free_throws = True
+    play.free_throw_shooter = player_name(event.data["player1_id"])
+
     if "Technical" in event.description or "Clear Path" in event.description:
         return
     if "of" not in event.description:

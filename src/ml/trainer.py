@@ -32,7 +32,7 @@ def objective(trial: optuna.trial.Trial) -> float:
         "shooter_wt": 1,  #trial.suggest_uniform("shooter_wt", 0, 1),
         "shot_made_wt": 4,  #trial.suggest_uniform("shot_made_wt", 0, 1),
         "shot_type_wt": 0.5,  #trial.suggest_uniform("shot_type_wt", 0, 1),
-        "box_wt": 1,
+        "box_wt": 0.1,
     }
     model = PlayModel(**args)
     datamodule = PlayModule(

@@ -38,7 +38,7 @@ class Heads(nn.ModuleDict):
 
         loss_dict = {}
         for key, head in self.items():
-            loss_dict[key] = head.get_loss(outputs, targets, validity)
+            loss_dict[key] = head.get_loss(outpts, targets, validity)
 
         return loss_dict
 

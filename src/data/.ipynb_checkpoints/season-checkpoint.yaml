@@ -1,0 +1,23 @@
+year:
+  type: int
+
+playoffs:
+  type: bool
+
+play_start_idx:
+  type: int
+
+play_end_idx: 
+  type: int
+
+possession_start_idx:
+  type: int
+
+possession_end_idx:
+  type: int
+
+game_start_idx:
+  type: int
+
+game_end_idx:
+  type: int

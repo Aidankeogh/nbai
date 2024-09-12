@@ -115,6 +115,7 @@ class PlayDataset(Dataset):
         return self.length
 
     def __getitem__(self, idx):
+        raise Exception("Deprecated, use batched play dataset")
         season_start = 0
         for season, length in self.season_lengths.items():
             if idx - season_start >= length:

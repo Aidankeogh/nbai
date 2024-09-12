@@ -1,0 +1,44 @@
+offense_team:
+  type: embedding
+
+defense_team:
+  type: embedding
+
+offense_score:
+  type: int
+
+defense_score:
+  type: int
+
+score_change:
+  type: int
+
+foul_change:
+  type: int
+
+offense_fouls_left:
+  type: int
+
+defense_fouls_left:
+  type: int
+
+is_first:
+  type: bool
+
+play_start_idx:
+  type: int
+
+play_end_idx: 
+  type: int
+
+start_time:
+  type: scalar
+
+end_time:
+  type: scalar
+
+game_idx:
+  type: int
+
+period:
+  type: int

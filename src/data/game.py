@@ -38,7 +38,7 @@ def parse_game(in_data, out_data):
 
     # game['date'] = raw_game.data['date']
     game.home_team = team_name(raw_game.data["home_team_id"])
-    game.away_team = team_name(raw_game.data["visitor_team_id"])
+    game.away_team = team_name(raw_game.data["away_team_id"])
     possessions = out_data["possessions"][
         int(game.possession_start_idx) : int(game.possession_end_idx)
     ]

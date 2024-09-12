@@ -1,3 +1,5 @@
+
+import torch
 import torch.nn as nn
 
 class TransformerPointwise(nn.Module):
@@ -34,3 +36,17 @@ class BaseHead(nn.Module):
 
     def stats_gt(self, inputs, validity):
         return {}, None
+
+if __name__ == "__main__":
+    x = torch.rand(1, 3, 2)
+    y = torch.rand(1, 3, 2)
+    xp = x.unsqueeze(2)
+    yp = y.unsqueeze(1)
+    xp = xp.repeat(1, 1, yp.shape[2], 1)
+    yp = yp.repeat(1, xp.shape[1], 1, 1)
+    comb = torch.cat([xp, yp], dim=-1)
+    print(comb[0, 1, 2]) 
+
+    print(x)
+    print(y)
+    print(comb)

@@ -1,0 +1,23 @@
+home_team:
+  type: embedding
+
+away_team:
+  type: embedding
+
+home_team_score:
+  type: int
+
+away_team_score:
+  type: int
+
+play_start_idx:
+  type: int
+
+play_end_idx: 
+  type: int
+
+possession_start_idx:
+  type: int
+
+possession_end_idx:
+  type: int

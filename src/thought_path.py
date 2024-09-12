@@ -4,6 +4,7 @@ from src.utilities.embedding_utilities import get_name, get_idx
 
 import oyaml
 
+# Let's replace this with a pytorch named dict
 
 class DataConfig:
     def __init__(self, yaml_path):
@@ -182,6 +183,16 @@ class ThoughtPath:
             f"ERROR, {key} not found in {type(self)} object."
             f"Viable keys are {self.keys()}"
         )
+
+    def to_dict(self):
+        d = {
+            k: self.__getattr__(k) 
+            for k in self.data_keys
+        }
+        for k, v in d.items():
+            if type(v) is torch.Tensor:
+                d[k] = v.tolist()
+        return d
 
 
 if __name__ == "__main__":

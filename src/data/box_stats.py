@@ -137,7 +137,6 @@ def parse_box_stats(play):
 
     return o_stats, d_stats
 
-
 def parse_multiple_plays(plays):
     stats = defaultdict(Box_stats)
     for play in plays:

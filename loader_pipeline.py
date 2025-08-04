@@ -3,14 +3,14 @@ from src.data.game import Game
 from shutil import copyfile
 import h5py
 
-DB_NAME = "cache/test_db_8.h5"
+DB_NAME = "cache/8-17-24.h5"
 
 #DB_NAME = "cache/ml_db_0.0.4.h5"
 open_db = lambda: h5py.File(DB_NAME, "a")
 
 with h5py.File(DB_NAME, "a") as db:
     if "raw_data_loaded" not in db:
-        load_raw_data(db, years=range(2016, 2020))
+        load_raw_data(db, years=range(2001, 2023))
 
 with h5py.File(DB_NAME, "a") as db:
     if "box_stats_accumulated" not in db:

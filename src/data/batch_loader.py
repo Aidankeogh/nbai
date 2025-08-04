@@ -62,8 +62,10 @@ def load_raw_data(
                 parse_possession(in_data, out_data)
             parse_game(in_data, out_data)
         parse_season(in_data, out_data)
-        dump_season(out_data, db)
-    db["raw_data_loaded"] = True
+        if db is not None:
+            dump_season(out_data, db)
+    if db is not None:
+        db["raw_data_loaded"] = True
     return out_data
 
 def dump_season(out_data, db):
@@ -120,17 +122,17 @@ def accumulate_box_stats(db):
 
         for play in plays:
             try:
-                off_stats, def_stats = parse_box_stats(play)
+                off_stats, def_stats = parse_play(play)
                 stats[play.offense_team] += off_stats
                 stats[play.defense_team] += def_stats
             except Exception as e:
                 print(e)
         all_stats[season] = stats
 
-        # for k, v in stats.items():
-        #    print(season, k)
-        #    db[f"box_stats/{season}/{k}"] = v.data
-        #    os.makedirs(f"metadata/rosters", exist_ok=True)
+        for k, v in stats.items():
+           print(season, k)
+           db[f"box_stats/{season}/{k}"] = v.data
+           os.makedirs(f"metadata/rosters", exist_ok=True)
         with open(f"metadata/rosters/{season}", "wb") as f:
             msgpack.dump(rosters, f)
     db["box_stats_accumulated"] = True
